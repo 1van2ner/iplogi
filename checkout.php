@@ -1,0 +1,312 @@
+<?php
+require_once 'includes/config.php';
+requireLogin();
+$pdo = getDB();
+
+// Costos delivery por distrito (sede: Santa Anita)
+$distritosLima = [
+  'Santa Anita'=>8,'Ate'=>8,'El Agustino'=>8,'San Luis'=>8,
+  'La Victoria'=>12,'Ate Vitarte'=>12,'San Juan de Lurigancho'=>12,'Cieneguilla'=>12,'Chaclacayo'=>12,
+  'Lima Cercado'=>15,'Breña'=>15,'La Molina'=>15,'Lince'=>15,'Rímac'=>15,'San Borja'=>15,
+  'Surquillo'=>15,'Miraflores'=>15,'San Isidro'=>15,'San Miguel'=>15,'Jesús María'=>15,
+  'Magdalena del Mar'=>15,'Pueblo Libre'=>15,'Barranco'=>15,'Chorrillos'=>15,
+  'Santiago de Surco'=>15,'Villa María del Triunfo'=>15,
+  'Los Olivos'=>20,'San Martín de Porres'=>20,'Independencia'=>20,'Comas'=>20,
+  'Carabayllo'=>20,'Puente Piedra'=>20,'Callao'=>20,'Bellavista'=>20,
+  'La Perla'=>20,'Carmen de la Legua'=>20,'Ventanilla'=>20,'Mi Perú'=>20,
+  'Lurigancho'=>20,'Lurín'=>20,'Pachacamac'=>20,'Villa El Salvador'=>20,
+  'San Juan de Miraflores'=>20,
+  'Ancón'=>25,'Santa Rosa'=>25,'Punta Hermosa'=>25,'Punta Negra'=>25,
+  'San Bartolo'=>25,'Santa María del Mar'=>25,'Pucusana'=>25,
+];
+ksort($distritosLima);
+$costoProvincias = 30.00;
+
+$s = $pdo->prepare("SELECT c.*, p.nombre, p.precio, p.precio_oferta, p.stock, p.marca, p.imagen, cat.icono
+    FROM carrito c JOIN productos p ON c.producto_id=p.id
+    JOIN categorias cat ON p.categoria_id=cat.id
+    WHERE c.usuario_id=? AND p.activo=1 ORDER BY c.creado_en DESC");
+$s->execute([$_SESSION['usuario_id']]);
+$items = $s->fetchAll();
+if (empty($items)) { header('Location: '.SITE_URL.'/carrito.php'); exit; }
+
+$subtotal = 0;
+foreach ($items as $it) { $subtotal += ($it['precio_oferta']??$it['precio']) * $it['cantidad']; }
+
+$errores = [];
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+  $tipoEnvio  = in_array($_POST['tipo_envio']??'',['delivery','provincia','recojo_tienda'])?$_POST['tipo_envio']:'';
+  $metodoPago = in_array($_POST['metodo_pago']??'',['yape','plin','transferencia','tarjeta'])?$_POST['metodo_pago']:'';
+  $direccion  = sanitize($_POST['direccion']??'');
+  $distrito   = sanitize($_POST['distrito']??'');
+  $provDest   = sanitize($_POST['provincia_destino']??'');
+  $referencia = sanitize($_POST['referencia']??'');
+  $notas      = sanitize($_POST['notas']??'');
+
+  if (!$tipoEnvio)  $errores[]='Selecciona el tipo de entrega.';
+  if (!$metodoPago) $errores[]='Selecciona el método de pago.';
+  if ($tipoEnvio==='delivery' && !$distrito)  $errores[]='Selecciona tu distrito.';
+  if ($tipoEnvio==='delivery' && !$direccion) $errores[]='Ingresa tu dirección.';
+  if ($tipoEnvio==='provincia' && !$provDest) $errores[]='Indica tu ciudad/provincia.';
+
+  if (empty($errores)) {
+    $envio = match($tipoEnvio) {
+      'delivery'      => $distritosLima[$distrito] ?? COSTO_DELIVERY,
+      'provincia'     => $costoProvincias,
+      default         => 0
+    };
+    $total  = $subtotal + $envio;
+    $codigo = generateOrderCode();
+    $dirFinal = ($tipoEnvio==='provincia') ? $provDest : $direccion;
+    try {
+      $pdo->beginTransaction();
+      $pdo->prepare("INSERT INTO pedidos (usuario_id,codigo,subtotal,envio,total,tipo_envio,metodo_pago,
+          direccion_entrega,distrito_entrega,referencia,notas,estado,creado_en)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,'pendiente',NOW())")
+        ->execute([$_SESSION['usuario_id'],$codigo,$subtotal,$envio,$total,
+          $tipoEnvio,$metodoPago,$dirFinal,$distrito,$referencia,$notas]);
+      $pedidoId = $pdo->lastInsertId();
+      foreach ($items as $it) {
+        $pr = $it['precio_oferta']??$it['precio'];
+        $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal)VALUES(?,?,?,?,?)")
+          ->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$pr*$it['cantidad']]);
+        $pdo->prepare("UPDATE productos SET stock=stock-? WHERE id=? AND stock>=?")
+          ->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);
+      }
+      $pdo->prepare("DELETE FROM carrito WHERE usuario_id=?")->execute([$_SESSION['usuario_id']]);
+      $pdo->commit();
+      header('Location: '.SITE_URL.'/pedido-exitoso.php?id='.$pedidoId); exit;
+    } catch(Exception $e) { $pdo->rollBack(); $errores[]='Error al procesar. Intenta nuevamente.'; }
+  }
+}
+
+$user=$pdo->prepare("SELECT * FROM usuarios WHERE id=?"); $user->execute([$_SESSION['usuario_id']]); $usuario=$user->fetch();
+$pageTitle='Finalizar Compra'; include 'includes/header.php';
+?>
+<div class="container">
+  <div class="breadcrumb"><a href="<?=SITE_URL?>/index.php">Inicio</a><span>›</span><a href="<?=SITE_URL?>/carrito.php">Carrito</a><span>›</span><strong>Checkout</strong></div>
+  <h1 class="page-title"><i class="fas fa-lock"></i> Finalizar Compra</h1>
+
+  <?php if (!empty($errores)): ?>
+    <div class="alert alert-error" style="margin-bottom:20px;">
+      <i class="fas fa-times-circle"></i>
+      <ul style="margin:0;padding-left:16px;"><?php foreach($errores as $e): ?><li><?=$e?></li><?php endforeach; ?></ul>
+    </div>
+  <?php endif; ?>
+
+  <form method="POST" id="checkout-form">
+  <div class="checkout-layout">
+    <div>
+
+      <!-- TIPO ENTREGA -->
+      <div class="checkout-block">
+        <div class="checkout-section-title"><i class="fas fa-truck"></i> Tipo de Entrega</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+
+          <label class="option-card <?=($_POST['tipo_envio']??'delivery')==='delivery'?'selected':''?>">
+            <input type="radio" name="tipo_envio" value="delivery" <?=($_POST['tipo_envio']??'delivery')==='delivery'?'checked':''?> onchange="switchEnvio('delivery')">
+            <div class="option-card-inner">
+              <div class="option-icon"><i class="fas fa-motorcycle"></i></div>
+              <div><div class="option-title">Delivery Lima</div><div class="option-subtitle">Varía por distrito</div><div class="option-price" style="color:#D7E022;">Desde S/ 8</div></div>
+            </div>
+          </label>
+
+          <label class="option-card <?=($_POST['tipo_envio']??'')==='provincia'?'selected':''?>">
+            <input type="radio" name="tipo_envio" value="provincia" <?=($_POST['tipo_envio']??'')==='provincia'?'checked':''?> onchange="switchEnvio('provincia')">
+            <div class="option-card-inner">
+              <div class="option-icon"><i class="fas fa-map-marked-alt"></i></div>
+              <div><div class="option-title">Provincia</div><div class="option-subtitle">Envío nacional</div><div class="option-price" style="color:#D7E022;">S/ <?=number_format($costoProvincias,2)?></div></div>
+            </div>
+          </label>
+
+          <label class="option-card <?=($_POST['tipo_envio']??'')==='recojo_tienda'?'selected':''?>">
+            <input type="radio" name="tipo_envio" value="recojo_tienda" <?=($_POST['tipo_envio']??'')==='recojo_tienda'?'checked':''?> onchange="switchEnvio('recojo_tienda')">
+            <div class="option-card-inner">
+              <div class="option-icon"><i class="fas fa-store"></i></div>
+              <div><div class="option-title">Recojo tienda</div><div class="option-subtitle">Jr. Paruro 1322</div><div class="option-price" style="color:#4caf50;">GRATIS</div></div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Delivery Lima campos -->
+        <div id="fields-delivery" style="margin-top:16px;<?=($_POST['tipo_envio']??'delivery')!=='delivery'?'display:none':''?>">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label>Distrito * <small style="color:var(--gris3);font-weight:400;">(costo varía según distancia desde Santa Anita)</small></label>
+            <select name="distrito" id="select-distrito" onchange="updateCostoDistrito(this.value)"
+                style="width:100%;padding:11px 14px;background:var(--bg3);border:1.5px solid var(--borde);border-radius:var(--r);color:var(--blanco);font-size:14px;">
+              <option value="">— Elige tu distrito —</option>
+              <?php foreach($distritosLima as $d=>$c): ?>
+                <option value="<?=htmlspecialchars($d)?>" data-costo="<?=$c?>" <?=($_POST['distrito']??'')===$d?'selected':''?>>
+                  <?=htmlspecialchars($d)?> — S/ <?=number_format($c,2)?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+            <div id="costo-info" style="margin-top:6px;font-size:12px;color:#D7E022;display:none;">
+              <i class="fas fa-info-circle"></i> Envío a este distrito: <strong id="costo-txt"></strong>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Dirección completa *</label>
+            <input type="text" name="direccion" value="<?=sanitize($_POST['direccion']??$usuario['direccion_entrega']??'')?>" placeholder="Av. / Jr. / Calle, número, piso...">
+          </div>
+          <div class="form-group">
+            <label>Referencia</label>
+            <input type="text" name="referencia" value="<?=sanitize($_POST['referencia']??'')?>" placeholder="Cerca de..., color de puerta, etc.">
+          </div>
+        </div>
+
+        <!-- Provincia campos -->
+        <div id="fields-provincia" style="margin-top:16px;<?=($_POST['tipo_envio']??'')==='provincia'?'':'display:none'?>">
+          <div class="form-group">
+            <label>Ciudad / Provincia *</label>
+            <input type="text" name="provincia_destino" value="<?=sanitize($_POST['provincia_destino']??'')?>" placeholder="Ej: Arequipa, Trujillo, Cusco...">
+          </div>
+          <div class="form-group">
+            <label>Dirección *</label>
+            <input type="text" name="direccion" value="<?=sanitize($_POST['direccion']??'')?>" placeholder="Av. / Jr. / Calle, número...">
+          </div>
+          <div style="background:rgba(215,224,34,.08);border:1px solid rgba(215,224,34,.25);border-radius:10px;padding:12px;font-size:13px;color:var(--gris2);">
+            <i class="fas fa-info-circle" style="color:#D7E022;"></i>
+            Costo envío a provincia: <strong style="color:#D7E022;">S/ <?=number_format($costoProvincias,2)?></strong> · Tiempo estimado: <strong>3–5 días hábiles</strong>
+          </div>
+        </div>
+
+        <!-- Recojo tienda info -->
+        <div id="fields-recojo" style="margin-top:16px;<?=($_POST['tipo_envio']??'')==='recojo_tienda'?'':'display:none'?>">
+          <div style="background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.25);border-radius:10px;padding:14px;font-size:13px;color:var(--gris2);">
+            <i class="fas fa-store" style="color:#4caf50;"></i> <strong style="color:#4caf50;">Recojo GRATIS</strong> — Nuestras sedes:<br><br>
+            <b>• Lima:</b> Jr. Paruro Nº 1322 - Sótano Tda S112<br>
+            <b>• La Molina:</b> Av. Melgarejo Nº 595<br>
+            <b>• Ate:</b> C.C. Plaza Vitarte, Block F Tda. 304<br><br>
+            <i class="fas fa-clock"></i> Lun–Sáb 9:00am – 8:00pm
+          </div>
+        </div>
+      </div>
+
+      <!-- MÉTODO PAGO -->
+      <div class="checkout-block">
+        <div class="checkout-section-title"><i class="fas fa-credit-card"></i> Método de Pago</div>
+        <div class="payment-options">
+          <label class="payment-card <?=($_POST['metodo_pago']??'')==='yape'?'selected':''?>">
+            <input type="radio" name="metodo_pago" value="yape" <?=($_POST['metodo_pago']??'')==='yape'?'checked':''?> onchange="selectPayment(this)">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Yape_logo.svg/120px-Yape_logo.svg.png" alt="Yape" style="height:22px;" onerror="this.outerHTML='<i class=\'fas fa-mobile-alt\' style=\'color:#6b2d8c;\'></i>'">
+            <span>Yape</span>
+          </label>
+          <label class="payment-card <?=($_POST['metodo_pago']??'')==='plin'?'selected':''?>">
+            <input type="radio" name="metodo_pago" value="plin" <?=($_POST['metodo_pago']??'')==='plin'?'checked':''?> onchange="selectPayment(this)">
+            <i class="fas fa-mobile-alt" style="color:#00b0c8;font-size:20px;"></i><span>Plin</span>
+          </label>
+          <label class="payment-card <?=($_POST['metodo_pago']??'')==='transferencia'?'selected':''?>">
+            <input type="radio" name="metodo_pago" value="transferencia" <?=($_POST['metodo_pago']??'')==='transferencia'?'checked':''?> onchange="selectPayment(this)">
+            <i class="fas fa-university" style="color:var(--primary);font-size:20px;"></i><span>Transferencia</span>
+          </label>
+          <label class="payment-card <?=($_POST['metodo_pago']??'')==='tarjeta'?'selected':''?>">
+            <input type="radio" name="metodo_pago" value="tarjeta" <?=($_POST['metodo_pago']??'')==='tarjeta'?'checked':''?> onchange="selectPayment(this)">
+            <i class="fas fa-credit-card" style="color:var(--primary);font-size:20px;"></i><span>Tarjeta</span>
+          </label>
+        </div>
+        <div id="yape-info" style="display:<?=in_array($_POST['metodo_pago']??'',['yape','plin'])?'block':'none'?>;margin-top:14px;background:rgba(107,45,140,.10);border:1px solid rgba(107,45,140,.25);border-radius:10px;padding:12px;font-size:13px;color:var(--gris2);">
+          <i class="fas fa-info-circle" style="color:#9c27b0;"></i>
+          Yape/Plin al: <strong>+51 950 923 109</strong> — Envía el comprobante por WhatsApp para confirmar.
+        </div>
+        <div id="transferencia-info" style="display:<?=($_POST['metodo_pago']??'')==='transferencia'?'block':'none'?>;margin-top:14px;background:rgba(215,224,34,.08);border:1px solid rgba(215,224,34,.25);border-radius:10px;padding:12px;font-size:13px;color:var(--gris2);">
+          <i class="fas fa-university" style="color:#D7E022;"></i>
+          <strong>BCP CCI:</strong> 00219100414817630152 — IP Tecnología Perú E.I.R.L.<br>
+          <span style="color:var(--gris3);">Envía voucher a WhatsApp: <strong>+51 950 923 109</strong></span>
+        </div>
+      </div>
+
+      <!-- NOTAS -->
+      <div class="checkout-block">
+        <div class="checkout-section-title"><i class="fas fa-comment-alt"></i> Notas del pedido</div>
+        <div class="form-group" style="margin-bottom:0;">
+          <textarea name="notas" rows="3" placeholder="Indicaciones adicionales, horario preferido..."><?=sanitize($_POST['notas']??'')?></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESUMEN -->
+    <div>
+      <div class="checkout-summary-wrap">
+        <h3><i class="fas fa-receipt" style="color:#6b7300;"></i> Resumen del pedido</h3>
+        <?php foreach($items as $it): $pr=$it['precio_oferta']??$it['precio']; ?>
+        <div class="checkout-item">
+          <div class="checkout-item-img">
+            <?php if(!empty($it['imagen'])): ?><img src="<?=SITE_URL?>/<?=sanitize($it['imagen'])?>" alt="" style="width:100%;height:100%;object-fit:contain;padding:4px;">
+            <?php else: ?><i class="fas <?=sanitize($it['icono'])?>"></i><?php endif; ?>
+          </div>
+          <div class="checkout-item-name"><?=sanitize($it['nombre'])?><span style="display:block;font-size:11px;color:var(--gris3);">x<?=$it['cantidad']?></span></div>
+          <div class="checkout-item-price"><?=formatPrice($pr*$it['cantidad'])?></div>
+        </div>
+        <?php endforeach; ?>
+
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--borde);">
+          <div class="summary-row"><span class="label">Subtotal</span><span><?=formatPrice($subtotal)?></span></div>
+          <div class="summary-row"><span class="label">Envío</span><span id="envio-val"><span style="color:var(--gris3);">Selecciona entrega</span></span></div>
+          <div class="summary-row total"><span>Total</span><span class="val" id="total-val"><?=formatPrice($subtotal)?></span></div>
+        </div>
+
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--borde);font-size:13px;color:var(--gris2);">
+          <div style="display:flex;gap:8px;margin-bottom:6px;"><i class="fas fa-user" style="color:#6b7300;width:14px;"></i><span><?=sanitize($usuario['nombre'].' '.$usuario['apellido'])?></span></div>
+          <div style="display:flex;gap:8px;margin-bottom:6px;"><i class="fas fa-envelope" style="color:#6b7300;width:14px;"></i><span><?=sanitize($usuario['email'])?></span></div>
+          <?php if(!empty($usuario['celular'])): ?><div style="display:flex;gap:8px;"><i class="fas fa-phone" style="color:#6b7300;width:14px;"></i><span><?=sanitize($usuario['celular'])?></span></div><?php endif; ?>
+        </div>
+
+        <button type="submit" class="btn-place-order"><i class="fas fa-lock"></i> Confirmar Pedido</button>
+        <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--gris3);"><i class="fas fa-shield-alt"></i> Compra 100% segura</div>
+      </div>
+    </div>
+  </div>
+  </form>
+</div>
+
+<script>
+const SUBTOTAL=<?=$subtotal?>,COSTO_PROV=<?=$costoProvincias?>;
+const DISTRITOS=<?=json_encode($distritosLima)?>;
+let tipoActual='<?=htmlspecialchars($_POST['tipo_envio']??'delivery')?>';
+
+function updateResumen(){
+  const ev=document.getElementById('envio-val'),tv=document.getElementById('total-val');
+  let costo=0;
+  if(tipoActual==='recojo_tienda'){ev.innerHTML='<span style="color:#4caf50;font-weight:700;">GRATIS</span>';}
+  else if(tipoActual==='provincia'){costo=COSTO_PROV;ev.textContent='S/ '+COSTO_PROV.toFixed(2);}
+  else{
+    const sel=document.getElementById('select-distrito'),opt=sel?.options[sel.selectedIndex];
+    if(opt&&opt.value){costo=parseFloat(opt.dataset.costo||0);ev.textContent='S/ '+costo.toFixed(2);}
+    else{ev.innerHTML='<span style="color:var(--gris3);">Elige distrito</span>';}
+  }
+  tv.textContent='S/ '+(SUBTOTAL+costo).toFixed(2);
+}
+
+function switchEnvio(tipo){
+  tipoActual=tipo;
+  document.querySelectorAll('input[name="tipo_envio"]').forEach(r=>{r.closest('.option-card')?.classList.toggle('selected',r.value===tipo);});
+  document.getElementById('fields-delivery').style.display=tipo==='delivery'?'':'none';
+  document.getElementById('fields-provincia').style.display=tipo==='provincia'?'':'none';
+  document.getElementById('fields-recojo').style.display=tipo==='recojo_tienda'?'':'none';
+  updateResumen();
+}
+
+function updateCostoDistrito(v){
+  const info=document.getElementById('costo-info'),txt=document.getElementById('costo-txt');
+  if(v&&DISTRITOS[v]!==undefined){txt.textContent='S/ '+DISTRITOS[v].toFixed(2);info.style.display='block';}
+  else info.style.display='none';
+  updateResumen();
+}
+
+function selectPayment(r){
+  document.querySelectorAll('.payment-card').forEach(c=>c.classList.remove('selected'));
+  r.closest('.payment-card').classList.add('selected');
+  document.getElementById('yape-info').style.display=(r.value==='yape'||r.value==='plin')?'block':'none';
+  document.getElementById('transferencia-info').style.display=r.value==='transferencia'?'block':'none';
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+  document.querySelectorAll('input[name="tipo_envio"]').forEach(r=>{if(r.checked)switchEnvio(r.value);});
+  document.querySelectorAll('.payment-card input[type="radio"]').forEach(r=>{if(r.checked)selectPayment(r);});
+  const sd=document.getElementById('select-distrito');
+  if(sd&&sd.value)updateCostoDistrito(sd.value);
+  updateResumen();
+});
+</script>
+<?php include 'includes/footer.php'; ?>
