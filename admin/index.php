@@ -5,6 +5,15 @@ if (!isAdmin()) { header('Location: ' . SITE_URL . '/index.php'); exit; }
 $pageTitle = 'Panel Admin';
 $pdo = getDB();
 
+try {
+    $col = $pdo->query("SHOW COLUMNS FROM productos LIKE 'canje_puntos'")->fetch();
+    if (!$col) {
+        $pdo->exec('ALTER TABLE productos ADD COLUMN canje_puntos INT NULL AFTER potencia_va');
+    }
+} catch (Exception $e) {
+    // Si la tabla no tiene permiso o el campo ya existe, ignoramos.
+}
+
 $msg = ''; $msgType = 'success';
 
 // ¿Ya se corrió migracion_roles.sql? (columna 'verificado' presente)
@@ -36,6 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $espec     = sanitize(trim($_POST['especificaciones'] ?? ''));
         $dest      = isset($_POST['destacado']) ? 1 : 0;
         $activo    = isset($_POST['activo'])    ? 1 : 0;
+        $canjear   = isset($_POST['canjear'])   ? 1 : 0;
+        $puntosCanje = $canjear && trim($_POST['canje_puntos'] ?? '') !== ''
+            ? max(0, (int)$_POST['canje_puntos'])
+            : null;
         $imagen    = sanitize($_POST['imagen_actual']  ?? '');
         $imagen2   = sanitize($_POST['imagen2_actual'] ?? '');
         $potenciaVA = $_POST['potencia_va'] !== '' ? (int)$_POST['potencia_va'] : null;
@@ -62,19 +75,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             if ($pid > 0) {
-                $pdo->prepare("UPDATE productos SET categoria_id=?,nombre=?,marca=?,modelo=?,descripcion=?,precio=?,precio_oferta=?,stock=?,especificaciones=?,destacado=?,activo=?,imagen=?,imagen2=?,potencia_va=? WHERE id=?")
-                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$imagen2,$potenciaVA,$pid]);
+                $pdo->prepare("UPDATE productos SET categoria_id=?,nombre=?,marca=?,modelo=?,descripcion=?,precio=?,precio_oferta=?,stock=?,especificaciones=?,destacado=?,activo=?,imagen=?,imagen2=?,potencia_va=?,canje_puntos=? WHERE id=?")
+                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$imagen2,$potenciaVA,$puntosCanje,$pid]);
             } else {
-                $pdo->prepare("INSERT INTO productos (categoria_id,nombre,marca,modelo,descripcion,precio,precio_oferta,stock,especificaciones,destacado,activo,imagen,imagen2,potencia_va) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$imagen2,$potenciaVA]);
+                $pdo->prepare("INSERT INTO productos (categoria_id,nombre,marca,modelo,descripcion,precio,precio_oferta,stock,especificaciones,destacado,activo,imagen,imagen2,potencia_va,canje_puntos) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$imagen2,$potenciaVA,$puntosCanje]);
             }
         } catch(Exception $e) {
             if ($pid > 0) {
-                $pdo->prepare("UPDATE productos SET categoria_id=?,nombre=?,marca=?,modelo=?,descripcion=?,precio=?,precio_oferta=?,stock=?,especificaciones=?,destacado=?,activo=?,imagen=? WHERE id=?")
-                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$pid]);
+                $pdo->prepare("UPDATE productos SET categoria_id=?,nombre=?,marca=?,modelo=?,descripcion=?,precio=?,precio_oferta=?,stock=?,especificaciones=?,destacado=?,activo=?,imagen=?,canje_puntos=? WHERE id=?")
+                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$puntosCanje,$pid]);
             } else {
-                $pdo->prepare("INSERT INTO productos (categoria_id,nombre,marca,modelo,descripcion,precio,precio_oferta,stock,especificaciones,destacado,activo,imagen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen]);
+                $pdo->prepare("INSERT INTO productos (categoria_id,nombre,marca,modelo,descripcion,precio,precio_oferta,stock,especificaciones,destacado,activo,imagen,canje_puntos) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$puntosCanje]);
             }
         }
         $msg = $pid > 0 ? "Producto \"$nombre\" actualizado." : "Producto \"$nombre\" creado.";
@@ -420,6 +433,8 @@ include '../includes/header.php';
       <a href="?tab=productos"  class="<?= $tab==='productos' ?'active':'' ?>"><i class="fas fa-box"></i> Productos</a>
       <a href="?tab=usuarios"   class="<?= $tab==='usuarios'  ?'active':'' ?>"><i class="fas fa-users"></i> Usuarios</a>
       <a href="promociones.php"><i class="fas fa-fire"></i> Promociones del Mes</a>
+      <a href="cupon.php" class="<?= $activeMenu === 'cupones' ? 'active' : '' ?>">
+            <i class="fas fa-ticket"></i> Cupones
       <a href="?tab=pedidos"    class="<?= $tab==='pedidos'   ?'active':'' ?>">
         <i class="fas fa-shopping-bag"></i> Pedidos
         <?php if($pedidosPend>0): ?>
@@ -843,9 +858,14 @@ renderOptsModal($raicesM);
       </div>
       <div class="form-group"><label>Descripción</label><textarea name="descripcion" id="pdesc" rows="2"></textarea></div>
       <div class="form-group"><label>Especificaciones</label><textarea name="especificaciones" id="pespec" rows="2"></textarea></div>
-      <div style="display:flex;gap:20px;margin-bottom:18px;">
+      <div style="display:flex;gap:20px;align-items:flex-end;margin-bottom:18px;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gris2);"><input type="checkbox" name="destacado" id="pdestacado"> Destacado</label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gris2);"><input type="checkbox" name="activo" id="pactivo" checked> Activo en tienda</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gris2);"><input type="checkbox" name="canjear" id="pcanjear"> Canjear</label>
+        <div class="form-group" style="flex:1;max-width:220px;min-width:180px;">
+          <label>Puntos para canjear</label>
+          <input type="number" name="canje_puntos" id="pcanje_puntos" min="0" placeholder="Ej: 100" style="width:100%;" disabled>
+        </div>
       </div>
       <div style="display:flex;gap:10px;">
         <button type="submit" style="flex:1;padding:12px;background:var(--amarillo);color:#000;border:none;border-radius:var(--r);font-size:14px;font-weight:800;cursor:pointer;"><i class="fas fa-save"></i> Guardar producto</button>
@@ -1018,6 +1038,14 @@ function abrirModalProd(p) {
 function eliminarProducto(id, nombre) {
   confirmar('Eliminar: ' + nombre + '\n\nEsta acción NO se puede deshacer.', function(ok) {
     if (ok) document.getElementById('form-delprod-' + id).submit();
+  });
+}
+if (document.getElementById('pcanjear')) {
+  document.getElementById('pcanjear').addEventListener('change', function() {
+    var pts = document.getElementById('pcanje_puntos');
+    if (!pts) return;
+    pts.disabled = !this.checked;
+    if (!this.checked) pts.value = '';
   });
 }
 function eliminarUsuario(id, nombre) {
