@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$items = $pdo->query("SELECT * FROM proximamente_imagenes ORDER BY orden ASC, id DESC")->fetchAll();
+$stmt = $pdo->query("SELECT * FROM proximamente ORDER BY id DESC");
 $editItem = null;
 if (isset($_GET['edit'])) {
     $ep = $pdo->prepare("SELECT * FROM proximamente_imagenes WHERE id=?");
