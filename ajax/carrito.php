@@ -41,7 +41,8 @@ switch ($action) {
             exit;
         }
 
-        $p = $pdo->prepare("SELECT id, nombre, stock FROM productos WHERE id = ? AND activo = 1");
+        $usarPuntos = isset($_POST['usar_puntos']) && $_POST['usar_puntos'] == '1';
+        $p = $pdo->prepare("SELECT id, nombre, stock, canje_puntos FROM productos WHERE id = ? AND activo = 1");
         $p->execute([$productoId]);
         $producto = $p->fetch();
 
@@ -56,9 +57,27 @@ switch ($action) {
 
         $w = getWhere();
 
-        // ¿Ya está en el carrito?
-        $check = $pdo->prepare("SELECT id, cantidad FROM carrito WHERE producto_id = ? AND {$w['campo']} = ?");
-        $check->execute([$productoId, $w['valor']]);
+        if ($usarPuntos) {
+            if (!isLoggedIn()) {
+                echo json_encode(['success' => false, 'message' => 'Debes iniciar sesión para canjear con puntos', 'require_login' => true]);
+                exit;
+            }
+            $stmtPuntos = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ?");
+            $stmtPuntos->execute([$_SESSION['usuario_id']]);
+            $puntosUsuario = (int)$stmtPuntos->fetchColumn();
+            $puntosNecesarios = (int)$producto['canje_puntos'];
+            if ($puntosNecesarios <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Este producto no puede ser canjeado con puntos']);
+                exit;
+            }
+            if ($puntosUsuario < $puntosNecesarios) {
+                echo json_encode(['success' => false, 'message' => 'No tienes suficientes puntos para canjear este producto']);
+                exit;
+            }
+        }
+
+        $check = $pdo->prepare("SELECT id, cantidad FROM carrito WHERE producto_id = ? AND {$w['campo']} = ? AND es_canje_puntos = ?");
+        $check->execute([$productoId, $w['valor'], $usarPuntos ? 1 : 0]);
         $existing = $check->fetch();
 
         if ($existing) {
@@ -66,11 +85,11 @@ switch ($action) {
             $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$nueva, $existing['id']]);
         } else {
             if (isLoggedIn()) {
-                $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad) VALUES (?, NULL, ?, ?)")
-                    ->execute([$_SESSION['usuario_id'], $productoId, $cantidad]);
+                $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad, es_canje_puntos, puntos_canjeados) VALUES (?, NULL, ?, ?, ?, ?)")
+                    ->execute([$_SESSION['usuario_id'], $productoId, $cantidad, $usarPuntos ? 1 : 0, $usarPuntos ? $producto['canje_puntos'] : 0]);
             } else {
-                $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad) VALUES (NULL, ?, ?, ?)")
-                    ->execute([session_id(), $productoId, $cantidad]);
+                $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad, es_canje_puntos, puntos_canjeados) VALUES (NULL, ?, ?, ?, ?, ?)")
+                    ->execute([session_id(), $productoId, $cantidad, 0, 0]);
             }
         }
 

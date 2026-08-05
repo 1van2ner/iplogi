@@ -20,6 +20,16 @@ if (!function_exists('countCarrito')) {
   }
 }
 $carritoCount = countCarrito();
+$userPoints = 0;
+if (isLoggedIn()) {
+  try {
+    $stmtPoints = getDB()->prepare("SELECT puntos FROM usuarios WHERE id = ?");
+    $stmtPoints->execute([$_SESSION['usuario_id']]);
+    $userPoints = (int)$stmtPoints->fetchColumn();
+  } catch (Exception $e) {
+    $userPoints = 0;
+  }
+}
 $pdo2 = getDB();
 $pdo2 = getDB();
 try {
@@ -78,6 +88,7 @@ if (isset($_SESSION['flash_message'])) {
             <button class="user-btn btn-header-action">
               <i class="fas fa-user-circle"></i>
               <span><?= sanitize(explode(' ', $_SESSION['nombre'])[0]) ?></span>
+              <span class="user-points"><?= number_format($userPoints) ?> pts</span>
               <i class="fas fa-chevron-down" style="font-size:10px;"></i>
             </button>
             <div class="user-dropdown">

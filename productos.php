@@ -168,6 +168,9 @@ if ($ajaxLoad) {
         if($desc) echo '<span class="badge-desc">'.$desc.'% OFF</span>';
         if($msv) echo '<span class="badge-hot" style="background:#e53935;color:#fff;">&#128293; MÁS VENDIDO</span>';
         elseif($p['destacado']) echo '<span class="badge-hot">&#9733; DEST.</span>';
+        if (!empty($p['canje_puntos']) && (int)$p['canje_puntos'] > 0) {
+            echo '<span class="badge-canje">Canjea '.number_format((int)$p['canje_puntos']).' pts</span>';
+        }
         if(!empty($p['imagen'])) {
             echo '<img class="img-principal" src="'.SITE_URL.'/'.htmlspecialchars($p['imagen']).'" alt="'.htmlspecialchars($p['nombre']).'" loading="lazy">';
             if($img2) echo '<img class="img-hover" src="'.SITE_URL.'/'.$img2.'" alt="" loading="lazy">';
@@ -222,6 +225,21 @@ include 'includes/header.php';
     font-weight: 800;
     padding: 3px 8px;
     border-radius: 5px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.badge-canje {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(255,255,255,0.92);
+    color: #333;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(0,0,0,0.08);
     z-index: 3;
     pointer-events: none;
 }
@@ -614,6 +632,10 @@ include 'includes/header.php';
             <span class="badge-hot" style="background:#e53935;color:#fff;">&#128293; MÁS VENDIDO</span>
         <?php elseif($p['destacado']): ?>
             <span class="badge-hot">&#9733; DEST.</span>
+        <?php endif; ?>
+
+        <?php if (!empty($p['canje_puntos']) && (int)$p['canje_puntos'] > 0): ?>
+            <span class="badge-canje">Canjea <?= number_format((int)$p['canje_puntos']) ?> pts</span>
         <?php endif; ?>
 
         <?php if(!empty($p['imagen'])): ?>

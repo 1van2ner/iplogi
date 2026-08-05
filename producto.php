@@ -28,6 +28,17 @@ $precio = $p['precio_oferta'] ?? $p['precio'];
 $desc   = $p['precio_oferta'] ? round((1 - $p['precio_oferta'] / $p['precio']) * 100) : 0;
 $enStock = (float)$p['stock'] > 0; // stock es varchar tipo "20+"
 
+$userPoints = 0;
+if (function_exists('isLoggedIn') && isLoggedIn()) {
+    try {
+        $stmtUser = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ?");
+        $stmtUser->execute([$_SESSION['usuario_id']]);
+        $userPoints = (int)$stmtUser->fetchColumn();
+    } catch (Exception $e) {
+        $userPoints = 0;
+    }
+}
+
 // Imágenes: principal + hover + extras (JSON)
 $imagenes = [];
 if (!empty($p['imagen'])) $imagenes[] = $p['imagen'];
@@ -216,6 +227,14 @@ include 'includes/header.php';
       <div class="pd-price-box">
         <?php if ($desc): ?><span class="pd-badge-desc"><?= $desc ?>% OFF</span><?php endif; ?>
         <?= renderPrecioCarrito($p, $precio, $desc, $p['id']) ?>
+        <?php if (!empty($p['canje_puntos']) && (int)$p['canje_puntos'] > 0): ?>
+          <button class="btn-cart btn-redeem" id="btn-redeem-points" type="button"
+                  data-producto-id="<?= $p['id'] ?>"
+                  data-puntos="<?= (int)$p['canje_puntos'] ?>"
+                  style="margin-top:14px;background:#CEFF04;color:#000;border:1.5px solid #d6ff69;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:800;cursor:pointer;">
+            <i class="fas fa-gift"></i> Canjear <?= number_format((int)$p['canje_puntos']) ?> pts
+          </button>
+        <?php endif; ?>
       </div>
 
       <?php if (!empty($p['descripcion'])): ?>
@@ -333,6 +352,63 @@ document.addEventListener('click', function(e) {
             btn.style.background = '';
             btn.style.color = '';
             btn.innerHTML = '<i class="fas fa-cart-plus"></i> Agregar al carrito';
+        }, 2000);
+    });
+});
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('#btn-redeem-points');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const productoId = btn.dataset.productoId;
+    const puntosNecesarios = parseInt(btn.dataset.puntos, 10) || 0;
+    const userPoints = <?= json_encode($userPoints) ?>;
+
+    if (userPoints < puntosNecesarios) {
+        if (typeof showToast === 'function') {
+            showToast('No tienes suficientes puntos para canjear este producto.', false);
+        } else {
+            alert('No tienes suficientes puntos para canjear este producto.');
+        }
+        return;
+    }
+
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+
+    fetch(SITE_URL + '/ajax/carrito.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'action=agregar&producto_id=' + encodeURIComponent(productoId) + '&cantidad=1&usar_puntos=1'
+    })
+    .then(r => r.text())
+    .then(text => {
+        const start = text.indexOf('{');
+        const d = JSON.parse(start !== -1 ? text.slice(start) : text);
+        if (d.success) {
+            btn.innerHTML = '<i class="fas fa-check"></i> Añadido por puntos';
+            btn.style.background = '#22c55e';
+            btn.style.color = '#fff';
+            if (typeof updateBadge === 'function') updateBadge(d.cart_count);
+            if (typeof showToast === 'function') showToast('Producto agregado al carrito con puntos.', true);
+        } else {
+            btn.innerHTML = orig;
+            if (typeof showToast === 'function') showToast(d.message || 'Error al canjear', false);
+            else alert(d.message || 'Error al canjear');
+        }
+    })
+    .catch(() => {
+        btn.innerHTML = orig;
+        if (typeof showToast === 'function') showToast('Error de conexión', false);
+    })
+    .finally(() => {
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.innerHTML = orig;
         }, 2000);
     });
 });

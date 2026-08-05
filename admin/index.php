@@ -6,9 +6,11 @@ $pageTitle = 'Panel Admin';
 $pdo = getDB();
 
 try {
-    $col = $pdo->query("SHOW COLUMNS FROM productos LIKE 'canje_puntos'")->fetch();
+    $col = $pdo->query("SHOW COLUMNS FROM productos LIKE 'canje_puntos'")->fetch(PDO::FETCH_ASSOC);
     if (!$col) {
-        $pdo->exec('ALTER TABLE productos ADD COLUMN canje_puntos INT NULL AFTER potencia_va');
+        $pdo->exec('ALTER TABLE productos ADD COLUMN canje_puntos INT NULL');
+    } elseif (preg_match('/^tinyint/i', $col['Type'] ?? '')) {
+        $pdo->exec('ALTER TABLE productos MODIFY COLUMN canje_puntos INT NULL');
     }
 } catch (Exception $e) {
     // Si la tabla no tiene permiso o el campo ya existe, ignoramos.
@@ -20,8 +22,14 @@ $msg = ''; $msgType = 'success';
 try {
     $colsUsuarios = $pdo->query("SHOW COLUMNS FROM usuarios")->fetchAll(PDO::FETCH_COLUMN);
     $tieneVerificadoCol = in_array('verificado', $colsUsuarios);
+    $tienePuntosCol = in_array('puntos', $colsUsuarios);
+    if (!$tienePuntosCol) {
+        $pdo->exec('ALTER TABLE usuarios ADD COLUMN puntos INT DEFAULT 0 AFTER activo');
+        $tienePuntosCol = true;
+    }
 } catch (Exception $e) {
     $tieneVerificadoCol = false;
+    $tienePuntosCol = false;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -86,8 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare("UPDATE productos SET categoria_id=?,nombre=?,marca=?,modelo=?,descripcion=?,precio=?,precio_oferta=?,stock=?,especificaciones=?,destacado=?,activo=?,imagen=?,canje_puntos=? WHERE id=?")
                     ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$puntosCanje,$pid]);
             } else {
-                $pdo->prepare("INSERT INTO productos (categoria_id,nombre,marca,modelo,descripcion,precio,precio_oferta,stock,especificaciones,destacado,activo,imagen,canje_puntos) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$catId,$nombre,$marca,$modelo,$desc,$precio,$oferta,$stock,$espec,$dest,$activo,$imagen,$puntosCanje]);
+$pdo->prepare("INSERT INTO productos (categoria_id, nombre, marca, modelo, descripcion, precio, precio_oferta, stock, especificaciones, destacado, activo, imagen, canje_puntos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute([$catId, $nombre, $marca, $modelo, $desc, $precio, $oferta, $stock, $espec, $dest, $activo, $imagen, $puntosCanje]);
             }
         }
         $msg = $pid > 0 ? "Producto \"$nombre\" actualizado." : "Producto \"$nombre\" creado.";
@@ -116,20 +124,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rol  = in_array($_POST['u_rol']??'',['admin','cliente_final','tecnico','proyectista','distribuidor']) ? $_POST['u_rol'] : 'cliente_final';
         $acti = isset($_POST['u_activo']) ? 1 : 0;
         $verif = isset($_POST['u_verificado']) ? 1 : 0;
+        $puntos = max(0, (int)($_POST['u_puntos'] ?? 0));
         $pass = $_POST['u_pass'] ?? '';
 
         if ($uid > 0) {
             $verifSql = $tieneVerificadoCol ? ",verificado=?,verificado_en=" . ($verif ? "NOW()" : "NULL") : "";
             if (!empty($pass)) {
-                $pdo->prepare("UPDATE usuarios SET tipo_documento=?,dni_ruc=?,nombre=?,apellido=?,email=?,telefono=?,celular=?,direccion_entrega=?,fecha_nacimiento=?,rol=?,activo=?$verifSql,password=? WHERE id=?")
+                $pdo->prepare("UPDATE usuarios SET tipo_documento=?,dni_ruc=?,nombre=?,apellido=?,email=?,telefono=?,celular=?,direccion_entrega=?,fecha_nacimiento=?,rol=?,activo=?,puntos=?$verifSql,password=? WHERE id=?")
                     ->execute($tieneVerificadoCol
-                        ? [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$verif,password_hash($pass,PASSWORD_DEFAULT),$uid]
-                        : [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,password_hash($pass,PASSWORD_DEFAULT),$uid]);
+                        ? [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$puntos,$verif,password_hash($pass,PASSWORD_DEFAULT),$uid]
+                        : [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$puntos,password_hash($pass,PASSWORD_DEFAULT),$uid]);
             } else {
-                $pdo->prepare("UPDATE usuarios SET tipo_documento=?,dni_ruc=?,nombre=?,apellido=?,email=?,telefono=?,celular=?,direccion_entrega=?,fecha_nacimiento=?,rol=?,activo=?$verifSql WHERE id=?")
+                $pdo->prepare("UPDATE usuarios SET tipo_documento=?,dni_ruc=?,nombre=?,apellido=?,email=?,telefono=?,celular=?,direccion_entrega=?,fecha_nacimiento=?,rol=?,activo=?,puntos=?$verifSql WHERE id=?")
                     ->execute($tieneVerificadoCol
-                        ? [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$verif,$uid]
-                        : [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$uid]);
+                        ? [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$puntos,$verif,$uid]
+                        : [$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,$rol,$acti,$puntos,$uid]);
             }
             $msg = "Usuario \"$nom\" actualizado.";
         } else {
@@ -151,11 +160,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($formErr) { $msg = implode(' / ',$formErr); $msgType='error'; }
             else {
                 if ($tieneVerificadoCol) {
-                    $pdo->prepare("INSERT INTO usuarios (tipo_documento,dni_ruc,nombre,apellido,email,telefono,celular,direccion_entrega,fecha_nacimiento,password,rol,activo,verificado,verificado_en) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,".($verif?"NOW()":"NULL").")")
-                        ->execute([$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,password_hash($pass,PASSWORD_DEFAULT),$rol,$verif]);
+                    $pdo->prepare("INSERT INTO usuarios (tipo_documento,dni_ruc,nombre,apellido,email,telefono,celular,direccion_entrega,fecha_nacimiento,password,rol,activo,puntos,verificado,verificado_en) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,".($verif?"NOW()":"NULL").")")
+                        ->execute([$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,password_hash($pass,PASSWORD_DEFAULT),$rol,$puntos,$verif]);
                 } else {
-                    $pdo->prepare("INSERT INTO usuarios (tipo_documento,dni_ruc,nombre,apellido,email,telefono,celular,direccion_entrega,fecha_nacimiento,password,rol,activo) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)")
-                        ->execute([$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,password_hash($pass,PASSWORD_DEFAULT),$rol]);
+                    $pdo->prepare("INSERT INTO usuarios (tipo_documento,dni_ruc,nombre,apellido,email,telefono,celular,direccion_entrega,fecha_nacimiento,password,rol,activo,puntos) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)")
+                        ->execute([$fdoc,$dni,$nom,$ape,$email,$cel,$cel,$dir?:null,$fnac?:null,password_hash($pass,PASSWORD_DEFAULT),$rol,$puntos]);
                 }
                 $msg = "Usuario \"$nom $ape\" creado correctamente.";
             }
@@ -907,7 +916,8 @@ renderOptsModal($raicesM);
       </div>
       <div class="form-group"><label>Dirección <span style="color:var(--gris3);font-size:11px;">(opcional)</span></label><input type="text" name="u_direccion" id="u_direccion" placeholder="Av. Ejemplo 123, Lima"></div>
       <div class="form-row">
-        <div class="form-group">
+        <div class="form-group"><label>Puntos</label><input type="number" name="u_puntos" id="u_puntos" min="0" value="0" placeholder="0"></div>
+        <div class="form-group" id="u_pass_group">
           <label>Contraseña <span id="pass-hint" style="font-size:11px;color:var(--gris3);">(obligatorio)</span></label>
           <div class="password-wrap">
             <input type="password" name="u_pass" id="u_pass" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
@@ -987,13 +997,15 @@ function abrirModalUser(u) {
     el('u_direccion').value = u.direccion_entrega || u.direccion || '';
     el('u_rol').value = u.rol || 'cliente_final';
     el('u_activo').checked = u.activo == 1;
+    el('u_puntos').value = typeof u.puntos !== 'undefined' ? u.puntos : 0;
     if (el('u_verificado')) el('u_verificado').checked = u.verificado == 1;
-    el('pass-hint').textContent = '(dejar vacío = no cambia)';
+    el('u_pass_group').style.display = 'none';
   } else {
     el('muser-title').textContent = 'Nuevo Usuario';
     document.getElementById('form-user').reset();
     el('user_id').value = 0;
     el('u_tipo').value = 'DNI'; updDoc();
+    el('u_pass_group').style.display = 'block';
     el('pass-hint').textContent = '(obligatorio)';
   }
   document.getElementById('modal-user').classList.add('open');
@@ -1026,10 +1038,19 @@ function abrirModalProd(p) {
         : '';
     }
     if (el('ppotencia_va')) el('ppotencia_va').value = p.potencia_va || '';
+    var canjePts = parseInt(p.canje_puntos) || 0;
+    el('pcanjear').checked = canjePts > 0;
+    el('pcanje_puntos').disabled = !el('pcanjear').checked;
+    el('pcanje_puntos').value = canjePts > 0 ? canjePts : '';
   } else {
     el('mprod-title').textContent = 'Nuevo Producto';
     document.getElementById('form-prod').reset();
     el('prod_id').value = 0;
+    if (el('pcanjear')) el('pcanjear').checked = false;
+    if (el('pcanje_puntos')) {
+      el('pcanje_puntos').disabled = true;
+      el('pcanje_puntos').value = '';
+    }
     el('img-preview').innerHTML = '';
     if (el('img2-preview')) el('img2-preview').innerHTML = '';
   }

@@ -141,7 +141,7 @@ include '../includes/header.php';
             <h1 style="font-size:22px;font-weight:800;"><i class="fas fa-th-large" style="color:var(--primary);"></i> Categorías</h1>
             <div style="font-size:13px;color:var(--gray);margin-top:2px;"><a href="index.php">Dashboard</a> › Categorías</div>
         </div>
-        <button onclick="document.getElementById('modal-cat').style.display='flex'"
+        <button onclick="openNewCategory()"
                 style="padding:10px 20px;background:var(--primary);color:white;border:none;border-radius:var(--radius);cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;">
             <i class="fas fa-plus"></i> Nueva Categoría
         </button>
@@ -229,6 +229,19 @@ include '../includes/header.php';
 function updateIconPreview(val) {
     var prev = document.getElementById('icon-preview');
     if (prev) prev.innerHTML = '<i class="fas ' + val + '"></i>';
+}
+
+function openNewCategory() {
+    var form = document.querySelector('#modal-cat form');
+    if (!form) return;
+    form.reset();
+    form.querySelector('[name="id"]').value = 0;
+    form.querySelector('[name="action"]').value = 'save';
+    form.querySelector('[name="icono"]').value = 'fa-tag';
+    var iconPreview = document.getElementById('icon-preview');
+    if (iconPreview) iconPreview.innerHTML = '<i class="fas fa-tag"></i>';
+    document.querySelector('#modal-cat h2').textContent = 'Nueva Categoría';
+    document.getElementById('modal-cat').style.display = 'flex';
 }
 
 // ── Eliminar categoría con modal confirmar() del footer ───────
