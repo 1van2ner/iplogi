@@ -86,14 +86,14 @@ include 'includes/header.php';
       <!-- Stats rápidas -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0;padding:14px;background:var(--bg3);border-radius:var(--r);">
         <div style="text-align:center;">
-          <div style="font-size:20px;font-weight:900;color:var(--amarillo);"><?= $totalPedidos ?></div>
+          <div style="font-size:20px;font-weight:900;color:var(--amarillo);\"><?= $totalPedidos ?></div>
           <div style="font-size:10px;color:var(--gris3);">Pedidos</div>
         </div>
         <div style="text-align:center;">
           <div style="font-size:20px;font-weight:900;color:var(--amarillo);">
-            <?= !empty($user['dni_ruc']) ? substr($user['dni_ruc'],0,4).'****' : '—' ?>
+            <?= number_format((int)($user['puntos'] ?? 0)) ?>
           </div>
-          <div style="font-size:10px;color:var(--gris3);"><?= $user['tipo_documento']??'DNI' ?></div>
+          <div style="font-size:10px;color:var(--gris3);">Puntos acumulados</div>
         </div>
       </div>
 
@@ -124,17 +124,19 @@ include 'includes/header.php';
         <form method="POST">
           <input type="hidden" name="action" value="update_perfil">
 
-          <!-- DNI / RUC (solo lectura) -->
-          <?php if(!empty($user['dni_ruc'])): ?>
-          <div class="form-group">
-            <label>Documento de identidad</label>
-            <div style="display:flex;gap:8px;">
-              <input type="text" value="<?= $user['tipo_documento']??'DNI' ?>" disabled style="width:80px;opacity:.5;cursor:not-allowed;">
-              <input type="text" value="<?= sanitize($user['dni_ruc']) ?>" disabled style="flex:1;opacity:.5;cursor:not-allowed;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Puntos acumulados</label>
+              <input type="text" value="<?= number_format((int)($user['puntos'] ?? 0)) ?> pts" disabled style="opacity:.5;cursor:not-allowed;">
             </div>
-            <span style="font-size:11px;color:var(--gris3);margin-top:4px;display:block;">Para cambiar tu documento contacta al soporte.</span>
+
+            <?php if(!empty($user['dni_ruc'])): ?>
+            <div class="form-group">
+              <label>Documento de identidad</label>
+              <input type="text" value="<?= sanitize($user['tipo_documento'] ?? 'DNI') . ' - ' . sanitize($user['dni_ruc']) ?>" disabled style="opacity:.5;cursor:not-allowed;">
+            </div>
+            <?php endif; ?>
           </div>
-          <?php endif; ?>
 
           <div class="form-row">
             <div class="form-group">

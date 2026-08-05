@@ -754,22 +754,77 @@ include '../includes/header.php';
 
 .table-actions {
     display: flex;
-    gap: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .table-action {
-    width: 32px;
-    height: 31px;
-    border: 1px solid var(--borde);
-    border-radius: 7px;
-    background: var(--bg3);
+    min-width: 90px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px;
+    background: rgba(255,255,255,.05);
     color: var(--gris2);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all .18s ease;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+    white-space: nowrap;
 }
 
 .table-action:hover {
     color: var(--amarillo-texto);
     border-color: var(--amarillo);
+    background: rgba(237,232,42,.12);
+    transform: translateY(-1px);
+}
+
+.table-action i {
+    font-size: 14px;
+}
+
+.table-action .action-label {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+@media (max-width: 740px) {
+    .table-actions {
+        gap: 6px;
+    }
+    .table-action {
+        min-width: 0;
+        width: auto;
+        padding: 0 10px;
+    }
+    .table-action .action-label {
+        display: none;
+    }
+}
+
+.table-action .action-label {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: inherit;
+    opacity: 0.9;
+}
+
+.table-action-delete {
+    border-color: rgba(229,57,53,.15);
+}
+
+.table-action-delete:hover {
+    border-color: #ef5350;
+    background: rgba(239,83,80,.12);
+    color: #ef5350;
 }
 
 @media (max-width: 950px) {
@@ -1189,12 +1244,14 @@ include '../includes/header.php';
                                     <div class="table-actions">
                                         <a href="cupon.php?edit=<?= (int)$cupon['id'] ?>" class="table-action" title="Editar cupón">
                                             <i class="fas fa-edit"></i>
+                                            <span class="action-label">Editar</span>
                                         </a>
 
                                         <form method="post" action="cupon.php" style="display:inline;">
                                             <input type="hidden" name="delete_id" value="<?= (int)$cupon['id'] ?>">
-                                            <button type="submit" class="table-action" title="Eliminar cupón" onclick="return confirm('¿Eliminar este cupón?');">
+                                            <button type="submit" class="table-action table-action-delete" title="Eliminar cupón" onclick="return confirm('¿Eliminar este cupón?');">
                                                 <i class="fas fa-trash"></i>
+                                                <span class="action-label">Borrar</span>
                                             </button>
                                         </form>
                                     </div>

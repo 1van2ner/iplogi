@@ -33,29 +33,86 @@ if (empty($items)) { header('Location: '.SITE_URL.'/carrito.php'); exit; }
 $subtotal = 0;
 foreach ($items as $it) { $subtotal += ($it['precio_oferta']??$it['precio']) * $it['cantidad']; }
 
+function validarCupon($pdo, $codigo, $subtotal) {
+  $codigo = trim($codigo);
+  if ($codigo === '') {
+    return [null, 0.0, ''];
+  }
+  try {
+    $stmt = $pdo->prepare("SELECT * FROM cupones WHERE codigo = ? AND activo = 1 LIMIT 1");
+    $stmt->execute([$codigo]);
+    $cupon = $stmt->fetch();
+    if (!$cupon) {
+      return [null, 0.0, 'Código de cupón no válido o inactivo.'];
+    }
+    $now = new DateTimeImmutable('now');
+    if (!empty($cupon['fecha_inicio'])) {
+      $inicio = new DateTimeImmutable($cupon['fecha_inicio']);
+      if ($now < $inicio) {
+        return [null, 0.0, 'El cupón aún no está vigente.'];
+      }
+    }
+    if (!empty($cupon['fecha_vencimiento'])) {
+      $fin = new DateTimeImmutable($cupon['fecha_vencimiento'].' 23:59:59');
+      if ($now > $fin) {
+        return [null, 0.0, 'El cupón ya expiró.'];
+      }
+    }
+    if (!empty($cupon['compra_minima']) && $subtotal < (float)$cupon['compra_minima']) {
+      return [null, 0.0, 'Este cupón requiere una compra mínima de S/ '.number_format((float)$cupon['compra_minima'],2).'.'];
+    }
+    $descuento = 0.0;
+    if (($cupon['tipo_descuento'] ?? 'porcentaje') === 'monto') {
+      $descuento = min((float)$cupon['descuento'], $subtotal);
+    } else {
+      $percent = min(max((float)$cupon['descuento'], 0), 100);
+      $descuento = round($subtotal * $percent / 100, 2);
+    }
+    return [$cupon, $descuento, ''];
+  } catch (Exception $e) {
+    return [null, 0.0, 'No se pudo validar el cupón. Intenta nuevamente.'];
+  }
+}
+
+$codigoCupon = sanitize($_POST['cupon_codigo'] ?? '');
+$cuponAplicado = null;
+$descuentoCupon = 0.0;
 $errores = [];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
-  $tipoEnvio  = in_array($_POST['tipo_envio']??'',['delivery','provincia','recojo_tienda'])?$_POST['tipo_envio']:'';
-  $metodoPago = in_array($_POST['metodo_pago']??'',['yape','plin','transferencia','tarjeta'])?$_POST['metodo_pago']:'';
-  $direccion  = sanitize($_POST['direccion']??'');
-  $distrito   = sanitize($_POST['distrito']??'');
-  $provDest   = sanitize($_POST['provincia_destino']??'');
-  $referencia = sanitize($_POST['referencia']??'');
-  $notas      = sanitize($_POST['notas']??'');
+  $tipoEnvio     = in_array($_POST['tipo_envio']??'',['delivery','provincia','recojo_tienda'])?$_POST['tipo_envio']:'';
+  $metodoPago    = in_array($_POST['metodo_pago']??'',['yape','plin','transferencia','tarjeta'])?$_POST['metodo_pago']:'';
+  $direccion     = sanitize($_POST['direccion']??'');
+  $distrito      = sanitize($_POST['distrito']??'');
+  $provDest      = sanitize($_POST['provincia_destino']??'');
+  $referencia    = sanitize($_POST['referencia']??'');
+  $notas         = sanitize($_POST['notas']??'');
+  $aplicarCupon  = isset($_POST['aplicar_cupon']);
 
-  if (!$tipoEnvio)  $errores[]='Selecciona el tipo de entrega.';
-  if (!$metodoPago) $errores[]='Selecciona el método de pago.';
-  if ($tipoEnvio==='delivery' && !$distrito)  $errores[]='Selecciona tu distrito.';
-  if ($tipoEnvio==='delivery' && !$direccion) $errores[]='Ingresa tu dirección.';
-  if ($tipoEnvio==='provincia' && !$provDest) $errores[]='Indica tu ciudad/provincia.';
+  if ($codigoCupon !== '') {
+      [$cuponAplicado, $descuentoCupon, $errorCupon] = validarCupon($pdo, $codigoCupon, $subtotal);
+      if ($errorCupon) {
+          $errores[] = $errorCupon;
+      }
+  }
 
-  if (empty($errores)) {
+  if (!$aplicarCupon) {
+    if (!$tipoEnvio)  $errores[]='Selecciona el tipo de entrega.';
+    if (!$metodoPago) $errores[]='Selecciona el método de pago.';
+    if ($tipoEnvio==='delivery' && !$distrito)  $errores[]='Selecciona tu distrito.';
+    if ($tipoEnvio==='delivery' && !$direccion) $errores[]='Ingresa tu dirección.';
+    if ($tipoEnvio==='provincia' && !$provDest) $errores[]='Indica tu ciudad/provincia.';
+  }
+
+  if (empty($errores) && !$aplicarCupon) {
     $envio = match($tipoEnvio) {
       'delivery'      => $distritosLima[$distrito] ?? COSTO_DELIVERY,
       'provincia'     => $costoProvincias,
       default         => 0
     };
-    $total  = $subtotal + $envio;
+    $total  = $subtotal + $envio - $descuentoCupon;
+    if ($total < 0) {
+      $total = 0;
+    }
     $codigo = generateOrderCode();
     $dirFinal = ($tipoEnvio==='provincia') ? $provDest : $direccion;
     try {
@@ -218,6 +275,20 @@ $pageTitle='Finalizar Compra'; include 'includes/header.php';
 
       <!-- NOTAS -->
       <div class="checkout-block">
+        <div class="checkout-section-title"><i class="fas fa-ticket-alt"></i> Código de Cupón</div>
+        <div class="form-group" style="margin-bottom:12px; display:flex; gap:10px; align-items:center;">
+          <input type="text" name="cupon_codigo" value="<?= sanitize($_POST['cupon_codigo'] ?? $codigoCupon ?? '') ?>" placeholder="Ingresa tu código de cupón" style="flex:1;">
+          <button type="submit" name="aplicar_cupon" class="btn-main" style="padding:10px 16px; white-space:nowrap;">Aplicar</button>
+        </div>
+        <?php if (!empty($cuponAplicado) && $descuentoCupon > 0): ?>
+          <div style="background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.25);border-radius:10px;padding:12px;font-size:13px;color:var(--gris2);">
+            <i class="fas fa-check-circle" style="color:#4caf50;"></i>
+            Cupón <strong><?= sanitize($cuponAplicado['codigo']) ?></strong> aplicado: descuento de <strong><?= formatPrice($descuentoCupon) ?></strong>.
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="checkout-block">
         <div class="checkout-section-title"><i class="fas fa-comment-alt"></i> Notas del pedido</div>
         <div class="form-group" style="margin-bottom:0;">
           <textarea name="notas" rows="3" placeholder="Indicaciones adicionales, horario preferido..."><?=sanitize($_POST['notas']??'')?></textarea>
@@ -242,8 +313,11 @@ $pageTitle='Finalizar Compra'; include 'includes/header.php';
 
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--borde);">
           <div class="summary-row"><span class="label">Subtotal</span><span><?=formatPrice($subtotal)?></span></div>
+        <?php if ($descuentoCupon > 0): ?>
+          <div class="summary-row" id="descuento-row"><span class="label">Descuento <?=sanitize($codigoCupon)?></span><span class="val" style="color:#4caf50;">-<?=formatPrice($descuentoCupon)?></span></div>
+        <?php endif; ?>
           <div class="summary-row"><span class="label">Envío</span><span id="envio-val"><span style="color:var(--gris3);">Selecciona entrega</span></span></div>
-          <div class="summary-row total"><span>Total</span><span class="val" id="total-val"><?=formatPrice($subtotal)?></span></div>
+          <div class="summary-row total"><span>Total</span><span class="val" id="total-val"><?=formatPrice($subtotal + ($envio ?? 0) - $descuentoCupon)?></span></div>
         </div>
 
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--borde);font-size:13px;color:var(--gris2);">
@@ -252,7 +326,7 @@ $pageTitle='Finalizar Compra'; include 'includes/header.php';
           <?php if(!empty($usuario['celular'])): ?><div style="display:flex;gap:8px;"><i class="fas fa-phone" style="color:#6b7300;width:14px;"></i><span><?=sanitize($usuario['celular'])?></span></div><?php endif; ?>
         </div>
 
-        <button type="submit" class="btn-place-order"><i class="fas fa-lock"></i> Confirmar Pedido</button>
+        <button type="submit" name="confirmar_pedido" class="btn-place-order"><i class="fas fa-lock"></i> Confirmar Pedido</button>
         <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--gris3);"><i class="fas fa-shield-alt"></i> Compra 100% segura</div>
       </div>
     </div>
@@ -261,21 +335,22 @@ $pageTitle='Finalizar Compra'; include 'includes/header.php';
 </div>
 
 <script>
-const SUBTOTAL=<?=$subtotal?>,COSTO_PROV=<?=$costoProvincias?>;
+const SUBTOTAL=<?=$subtotal?>,COSTO_PROV=<?=$costoProvincias?>,CUpon_DESCUENTO=<?=$descuentoCupon?>;
 const DISTRITOS=<?=json_encode($distritosLima)?>;
 let tipoActual='<?=htmlspecialchars($_POST['tipo_envio']??'delivery')?>';
 
 function updateResumen(){
   const ev=document.getElementById('envio-val'),tv=document.getElementById('total-val');
   let costo=0;
-  if(tipoActual==='recojo_tienda'){ev.innerHTML='<span style="color:#4caf50;font-weight:700;">GRATIS</span>';}
-  else if(tipoActual==='provincia'){costo=COSTO_PROV;ev.textContent='S/ '+COSTO_PROV.toFixed(2);}
+  if(tipoActual==='recojo_tienda'){ev.innerHTML='<span style="color:#4caf50;font-weight:700;">GRATIS</span>';} 
+  else if(tipoActual==='provincia'){costo=COSTO_PROV;ev.textContent='S/ '+COSTO_PROV.toFixed(2);} 
   else{
     const sel=document.getElementById('select-distrito'),opt=sel?.options[sel.selectedIndex];
-    if(opt&&opt.value){costo=parseFloat(opt.dataset.costo||0);ev.textContent='S/ '+costo.toFixed(2);}
-    else{ev.innerHTML='<span style="color:var(--gris3);">Elige distrito</span>';}
+    if(opt&&opt.value){costo=parseFloat(opt.dataset.costo||0);ev.textContent='S/ '+costo.toFixed(2);} 
+    else{ev.innerHTML='<span style="color:var(--gris3);">Elige distrito</span>';} 
   }
-  tv.textContent='S/ '+(SUBTOTAL+costo).toFixed(2);
+  const total = Math.max(0, SUBTOTAL + costo - CUpon_DESCUENTO);
+  tv.textContent='S/ '+total.toFixed(2);
 }
 
 function switchEnvio(tipo){
