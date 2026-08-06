@@ -28,7 +28,7 @@ define('COSTO_DELIVERY', 15.00);
 // El token nunca se debe exponer al navegador; solo se usa desde PHP (server-side).
 // ============================================================
 define('APIPERU_TOKEN', 'ae2c5b6d4235e930c7a03ef65c0a32a811bed92462fb9f5b25e238cd8fde7d75');
-
+define('CONSULTADNI_API_KEY', 'cdni_13cc123eab33d6eeb7d020bf9b453c8a');
 // ============================================================
 // CONFIGURACIÓN DE CORREO (SMTP Banahosting)
 // ============================================================

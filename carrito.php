@@ -23,12 +23,15 @@ $items = $s->fetchAll();
 
 $subtotal = 0;
 foreach ($items as $item) {
+    if ($item['es_canje_puntos']) {
+        continue;
+    }
     $precio    = ($item['precio_oferta'] && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
     $precio    = precioFinal($precio);
     $subtotal += $precio * $item['cantidad'];
 }
-$envio = $subtotal >= 200 ? 0 : 15;
-$total = $subtotal + $envio;
+$envio = $subtotal >= 200 ? 0 : null;
+$total = $subtotal + ($envio ?? 0);
 
 $pageTitle = 'Mi Carrito';
 include 'includes/header.php';
@@ -211,8 +214,12 @@ include 'includes/header.php';
 
         <!-- Filas -->
         <?php foreach ($items as $item):
-          $precio = ($item['precio_oferta'] && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
-          $precio = precioFinal($precio);
+          if ($item['es_canje_puntos']) {
+              $precio = 0;
+          } else {
+              $precio = ($item['precio_oferta'] && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
+              $precio = precioFinal($precio);
+          }
           $precioTachado = precioFinal($item['precio']);
           $sub    = $precio * $item['cantidad'];
         ?>
@@ -233,7 +240,9 @@ include 'includes/header.php';
               <a href="<?= SITE_URL ?>/producto.php?id=<?= $item['producto_id'] ?>"><?= sanitize($item['nombre']) ?></a>
             </div>
             <div class="c-marca"><?= sanitize($item['marca']) ?></div>
-            <?php if ($item['precio_oferta'] && $item['precio_oferta'] > 0): ?>
+            <?php if ($item['es_canje_puntos']): ?>
+              <div style="font-size:12px;color:#6b7300;font-weight:700;">Canjeado con <?= number_format($item['puntos_canjeados'] ?? 0) ?> pts</div>
+            <?php elseif ($item['precio_oferta'] && $item['precio_oferta'] > 0): ?>
               <div class="c-tachado"><?= formatPrice($precioTachado) ?></div>
             <?php endif; ?>
           </div>
@@ -296,9 +305,11 @@ include 'includes/header.php';
       <div class="resumen-fila">
         <span class="lbl">Envío</span>
         <span id="resumen-envio">
-          <?= $envio == 0
-            ? '<span style="color:#166534;font-weight:700;">GRATIS</span>'
-            : formatPrice($envio) ?>
+          <?php if ($envio === 0): ?>
+            <span style="color:#166534;font-weight:700;">GRATIS</span>
+          <?php else: ?>
+            <span style="color:#888;">Selecciona entrega</span>
+          <?php endif; ?>
         </span>
       </div>
 
@@ -368,17 +379,16 @@ function actualizarResumen() {
 
     document.getElementById('resumen-sub').textContent   = 'S/ ' + d.subtotal.toFixed(2);
     document.getElementById('resumen-total').textContent = 'S/ ' + d.total.toFixed(2);
-    document.getElementById('resumen-envio').innerHTML   = d.envio == 0
+    document.getElementById('resumen-envio').innerHTML   = d.envio === 0
       ? '<span style="color:#166534;font-weight:700;">GRATIS</span>'
-      : 'S/ ' + d.envio.toFixed(2);
+      : '<span style="color:#888;">Selecciona entrega</span>';
 
     const infoDiv = document.getElementById('info-envio');
     if (infoDiv) {
-      if (d.envio == 0) {
+      if (d.subtotal >= 200) {
         infoDiv.innerHTML = '<div class="info-envio-gratis"><i class="fas fa-check-circle"></i> ¡Tienes envío gratis!</div>';
       } else {
-        const falta = (200 - d.subtotal).toFixed(2);
-        infoDiv.innerHTML = '<div class="info-envio-falta"><i class="fas fa-info-circle"></i> Agrega <strong>S/ ' + falta + '</strong> más para envío gratis</div>';
+        infoDiv.innerHTML = '<div class="info-envio-falta"><i class="fas fa-info-circle"></i> Selecciona el tipo de entrega en checkout para ver el costo de envío</div>';
       }
     }
 

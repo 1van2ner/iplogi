@@ -285,28 +285,39 @@ textarea {
 .user-btn {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.1);
-  border: 2px solid rgba(0, 0, 0, 0.18);
-  border-radius: var(--r);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  color: #000;
-  transition: all 0.2s;
-}
-.user-btn .user-points {
-  background: #CEFF04;
-  color: #000;
-  padding: 3px 8px;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .2px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 .user-btn:hover {
-  background: rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+  background: #fff;
+  box-shadow: 0 16px 28px rgba(0,0,0,0.12);
+}
+.user-btn .user-points {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 70px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #CEFF04 0%, #d9ff7b 100%);
+  color: #111;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.08);
+}
+.user-btn i {
+  color: #222;
 }
 .user-dropdown {
   display: none;

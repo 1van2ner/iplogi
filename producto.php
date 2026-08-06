@@ -228,7 +228,7 @@ include 'includes/header.php';
         <?php if ($desc): ?><span class="pd-badge-desc"><?= $desc ?>% OFF</span><?php endif; ?>
         <?= renderPrecioCarrito($p, $precio, $desc, $p['id']) ?>
         <?php if (!empty($p['canje_puntos']) && (int)$p['canje_puntos'] > 0): ?>
-          <button class="btn-cart btn-redeem" id="btn-redeem-points" type="button"
+          <button class="btn-redeem" id="btn-redeem-points" type="button"
                   data-producto-id="<?= $p['id'] ?>"
                   data-puntos="<?= (int)$p['canje_puntos'] ?>"
                   style="margin-top:14px;background:#CEFF04;color:#000;border:1.5px solid #d6ff69;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:800;cursor:pointer;">
@@ -371,6 +371,11 @@ document.addEventListener('click', function(e) {
         } else {
             alert('No tienes suficientes puntos para canjear este producto.');
         }
+        return;
+    }
+
+    if (!confirm('¿Estás seguro que quieres canjear este producto por puntos?')) {
+        btn.disabled = false;
         return;
     }
 

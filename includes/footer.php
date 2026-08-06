@@ -363,6 +363,7 @@ function updateBadge(n) {
 // ── Agregar al carrito (delegado en document para cubrir
 //    productos cargados dinámicamente) ────────────────────────
 document.addEventListener('click', function(e) {
+  if (e.target.closest('.btn-redeem')) return;
   const btn = e.target.closest('.btn-cart, .btn-add-cart, [data-action="agregar-carrito"]');
   if (!btn) return;
 

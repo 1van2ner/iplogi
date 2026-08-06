@@ -89,7 +89,7 @@ if (isset($_SESSION['flash_message'])) {
               <i class="fas fa-user-circle"></i>
               <span><?= sanitize(explode(' ', $_SESSION['nombre'])[0]) ?></span>
               <span class="user-points"><?= number_format($userPoints) ?> pts</span>
-              <i class="fas fa-chevron-down" style="font-size:10px;"></i>
+              <i class="fas fa-chevron-down" style="font-size:12px; color: #656565;"></i>
             </button>
             <div class="user-dropdown">
               <a href="<?= SITE_URL ?>/perfil.php"><i class="fas fa-user" style="color:var(--primary);width:16px;"></i> Mi Perfil</a>

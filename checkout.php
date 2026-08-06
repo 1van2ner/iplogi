@@ -31,7 +31,13 @@ $items = $s->fetchAll();
 if (empty($items)) { header('Location: '.SITE_URL.'/carrito.php'); exit; }
 
 $subtotal = 0;
-foreach ($items as $it) { $subtotal += ($it['precio_oferta']??$it['precio']) * $it['cantidad']; }
+foreach ($items as $it) {
+    if ($it['es_canje_puntos']) {
+        continue;
+    }
+    $precioItem = ($it['precio_oferta'] ?? $it['precio']);
+    $subtotal += $precioItem * $it['cantidad'];
+}
 
 function validarCupon($pdo, $codigo, $subtotal) {
   $codigo = trim($codigo);
@@ -124,9 +130,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
           $tipoEnvio,$metodoPago,$dirFinal,$distrito,$referencia,$notas]);
       $pedidoId = $pdo->lastInsertId();
       foreach ($items as $it) {
-        $pr = $it['precio_oferta']??$it['precio'];
+        if ($it['es_canje_puntos']) {
+          $pr = 0;
+          $subtotalItem = 0;
+        } else {
+          $pr = $it['precio_oferta'] ?? $it['precio'];
+          $subtotalItem = $pr * $it['cantidad'];
+        }
         $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal)VALUES(?,?,?,?,?)")
-          ->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$pr*$it['cantidad']]);
+          ->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem]);
         $pdo->prepare("UPDATE productos SET stock=stock-? WHERE id=? AND stock>=?")
           ->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);
       }
