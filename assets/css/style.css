@@ -443,6 +443,36 @@ textarea {
   display: flex;
   flex: 1;
 }
+/* Asegurar que la barra de navegación sirva de referencia para el anuncio flotante */
+.main-nav .container {
+    position: relative;
+}
+
+/* Estilo del anuncio flotante (encima de todo, sin empujar nada) */
+.nav-black-friday-float {
+    position: absolute;
+    right: 25px; /* Ubicado hacia el lado derecho, al costado de Contacto */
+    top: 50%;
+    transform: translateY(-50%); /* Centrado vertical exacto */
+    z-index: 100; /* Se dibuja por encima de los demás elementos */
+    display: inline-block;
+}
+
+.nav-black-friday-float img {
+    height: 44px; /* Tamaño llamativo pero integrado */
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 0 5px #ccff00); /* Halo fosforescente llamativo */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4); /* Sombra de profundidad */
+    border-radius: 4px;
+    transition: transform 0.2s ease-in-out, filter 0.2s ease-in-out;
+}
+
+/* Efecto al pasar el cursor por encima del anuncio */
+.nav-black-friday-float:hover img {
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 9px #ccff00);
+}
 .nav-links li a {
   display: flex;
   align-items: center;

@@ -94,6 +94,7 @@ if (isset($_SESSION['flash_message'])) {
             <div class="user-dropdown">
               <a href="<?= SITE_URL ?>/perfil.php"><i class="fas fa-user" style="color:var(--primary);width:16px;"></i> Mi Perfil</a>
               <a href="<?= SITE_URL ?>/mis-pedidos.php"><i class="fas fa-box" style="color:var(--primary);width:16px;"></i> Mis Pedidos</a>
+              <a href="<?= SITE_URL ?>/mis-cupones.php"><i class="fas fa-gift" style="color:var(--primary);width:16px;"></i> Mis Cupones</a>
               <?php if (isAdmin()): ?>
                 <a href="<?= SITE_URL ?>/admin/index.php"><i class="fas fa-cog" style="color:var(--primary);width:16px;"></i> Panel Admin</a>
               <?php endif; ?>
@@ -173,6 +174,9 @@ if (isset($_SESSION['flash_message'])) {
         <li><a href="<?= SITE_URL ?>/productos.php?categoria=9"><i class="fas fa-bolt"></i> Energía</a></li>
         <li><a href="<?= SITE_URL ?>/contacto.php" <?= $currentPage === 'contacto.php' ? 'class="active"' : '' ?>>Contacto</a></li>
       </ul>
+      <a href="<?= SITE_URL ?>/Black_friday.php" class="nav-black-friday-float">
+        <img src="<?= SITE_URL ?>/assets/img/Black_friday.jgp.jpg" alt="Black Friday">
+      </a>
     </div>
 
   </nav>
@@ -202,6 +206,17 @@ if (isset($_SESSION['flash_message'])) {
           userWrap?.classList.remove('open'); // cerrar usuario si estaba abierto
         });
         catMenu.querySelector('.cat-dropdown')?.addEventListener('click', e => e.stopPropagation());
+      }
+
+      // ── Switch de Eventos → oculta/activa botón Black Friday ──
+      const bfSwitch = document.querySelector('#bf-event-switch');
+      const bfFloat = document.querySelector('.nav-black-friday-float');
+      if (bfSwitch && bfFloat) {
+        const syncBlackFridayVisibility = () => {
+          bfFloat.style.display = bfSwitch.checked ? 'none' : 'inline-block';
+        };
+        bfSwitch.addEventListener('change', syncBlackFridayVisibility);
+        syncBlackFridayVisibility();
       }
 
       // ── Cerrar ambos al hacer click fuera ─────────────────────

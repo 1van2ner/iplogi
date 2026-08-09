@@ -1,5 +1,6 @@
 <?php
 require_once 'includes/config.php';
+include_once 'includes/funciones_cupones.php';
 if (isLoggedIn()) { header('Location: ' . SITE_URL . '/index.php'); exit; }
 
 // Cargar email_verification
@@ -169,6 +170,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $placeholders = implode(',', array_fill(0, count($valores), '?'));
             $sqlIns = "INSERT INTO usuarios (" . implode(', ', $campos) . ") VALUES ($placeholders)";
             $pdo->prepare($sqlIns)->execute($valores);
+
+            $nuevo_usuario_id = (int)$pdo->lastInsertId();
+            $cupon_bienvenida_id = 1;
+            asignarCuponAutomatico($pdo, $nuevo_usuario_id, $cupon_bienvenida_id, 15);
 
             // Si el rol calculado es "proyectista", avisar por correo (dato clave para verificarlo a mano)
             if ($rolCalculado === 'proyectista' && function_exists('sendNotificacionRolEspecial')) {

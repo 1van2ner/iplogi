@@ -39,34 +39,71 @@ foreach ($items as $it) {
     $subtotal += $precioItem * $it['cantidad'];
 }
 
-function validarCupon($pdo, $codigo, $subtotal) {
+function validarCupon($pdo, $codigo, $subtotal, $usuarioId = null) {
   $codigo = trim($codigo);
   if ($codigo === '') {
-    return [null, 0.0, ''];
+    return [null, 0.0, '', null];
   }
   try {
-    $stmt = $pdo->prepare("SELECT * FROM cupones WHERE codigo = ? AND activo = 1 LIMIT 1");
-    $stmt->execute([$codigo]);
-    $cupon = $stmt->fetch();
-    if (!$cupon) {
-      return [null, 0.0, 'Código de cupón no válido o inactivo.'];
-    }
-    $now = new DateTimeImmutable('now');
-    if (!empty($cupon['fecha_inicio'])) {
-      $inicio = new DateTimeImmutable($cupon['fecha_inicio']);
-      if ($now < $inicio) {
-        return [null, 0.0, 'El cupón aún no está vigente.'];
+    $cupon = null;
+    $usuarioCuponId = null;
+    
+    // 1. Buscar en cupones personales asignados (BIENVENIDA-XXXXX, CUMPLE-XXXXX, etc)
+    if ($usuarioId) {
+      $stmtPersonal = $pdo->prepare("
+        SELECT uc.id as usuario_cupon_id, uc.fecha_expiracion, uc.usado, 
+               c.* FROM usuario_cupones uc
+        JOIN cupones c ON uc.cupon_id = c.id
+        WHERE uc.codigo_personal = ? AND uc.usuario_id = ? AND uc.usado = 0
+        LIMIT 1
+      ");
+      $stmtPersonal->execute([$codigo, $usuarioId]);
+      $cuponPersonal = $stmtPersonal->fetch();
+      
+      if ($cuponPersonal) {
+        $cupon = $cuponPersonal;
+        $usuarioCuponId = $cuponPersonal['usuario_cupon_id'];
+        
+        // Validar fecha de expiración personal
+        $now = new DateTimeImmutable('now');
+        if (!empty($cupon['fecha_expiracion'])) {
+          $fin = new DateTimeImmutable($cupon['fecha_expiracion'].' 23:59:59');
+          if ($now > $fin) {
+            return [null, 0.0, 'El cupón ya expiró.', null];
+          }
+        }
       }
     }
-    if (!empty($cupon['fecha_vencimiento'])) {
+    
+    // 2. Si no encontró cupón personal, buscar cupón público
+    if (!$cupon) {
+      $stmt = $pdo->prepare("SELECT * FROM cupones WHERE codigo = ? AND activo = 1 LIMIT 1");
+      $stmt->execute([$codigo]);
+      $cupon = $stmt->fetch();
+      if (!$cupon) {
+        return [null, 0.0, 'Código de cupón no válido o inactivo.', null];
+      }
+    }
+    
+    // 3. Validar fechas y condiciones del cupón
+    $now = new DateTimeImmutable('now');
+    if (!empty($cupon['fecha_inicio']) && !$usuarioCuponId) {
+      $inicio = new DateTimeImmutable($cupon['fecha_inicio']);
+      if ($now < $inicio) {
+        return [null, 0.0, 'El cupón aún no está vigente.', null];
+      }
+    }
+    if (!empty($cupon['fecha_vencimiento']) && !$usuarioCuponId) {
       $fin = new DateTimeImmutable($cupon['fecha_vencimiento'].' 23:59:59');
       if ($now > $fin) {
-        return [null, 0.0, 'El cupón ya expiró.'];
+        return [null, 0.0, 'El cupón ya expiró.', null];
       }
     }
     if (!empty($cupon['compra_minima']) && $subtotal < (float)$cupon['compra_minima']) {
-      return [null, 0.0, 'Este cupón requiere una compra mínima de S/ '.number_format((float)$cupon['compra_minima'],2).'.'];
+      return [null, 0.0, 'Este cupón requiere una compra mínima de S/ '.number_format((float)$cupon['compra_minima'],2).'.', null];
     }
+    
+    // 4. Calcular descuento
     $descuento = 0.0;
     if (($cupon['tipo_descuento'] ?? 'porcentaje') === 'monto') {
       $descuento = min((float)$cupon['descuento'], $subtotal);
@@ -74,15 +111,16 @@ function validarCupon($pdo, $codigo, $subtotal) {
       $percent = min(max((float)$cupon['descuento'], 0), 100);
       $descuento = round($subtotal * $percent / 100, 2);
     }
-    return [$cupon, $descuento, ''];
+    return [$cupon, $descuento, '', $usuarioCuponId];
   } catch (Exception $e) {
-    return [null, 0.0, 'No se pudo validar el cupón. Intenta nuevamente.'];
+    return [null, 0.0, 'No se pudo validar el cupón. Intenta nuevamente.', null];
   }
 }
 
 $codigoCupon = sanitize($_POST['cupon_codigo'] ?? '');
 $cuponAplicado = null;
 $descuentoCupon = 0.0;
+$usuarioCuponIdAplicado = null;
 $errores = [];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $tipoEnvio     = in_array($_POST['tipo_envio']??'',['delivery','provincia','recojo_tienda'])?$_POST['tipo_envio']:'';
@@ -95,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   $aplicarCupon  = isset($_POST['aplicar_cupon']);
 
   if ($codigoCupon !== '') {
-      [$cuponAplicado, $descuentoCupon, $errorCupon] = validarCupon($pdo, $codigoCupon, $subtotal);
+      [$cuponAplicado, $descuentoCupon, $errorCupon, $usuarioCuponIdAplicado] = validarCupon($pdo, $codigoCupon, $subtotal, $_SESSION['usuario_id']);
       if ($errorCupon) {
           $errores[] = $errorCupon;
       }
@@ -143,6 +181,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
           ->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);
       }
       $pdo->prepare("DELETE FROM carrito WHERE usuario_id=?")->execute([$_SESSION['usuario_id']]);
+      
+      // Marcar cupón personal como usado si fue aplicado
+      if ($usuarioCuponIdAplicado) {
+        $pdo->prepare("UPDATE usuario_cupones SET usado = 1 WHERE id = ?")->execute([$usuarioCuponIdAplicado]);
+      }
+      
       $pdo->commit();
       header('Location: '.SITE_URL.'/pedido-exitoso.php?id='.$pedidoId); exit;
     } catch(Exception $e) { $pdo->rollBack(); $errores[]='Error al procesar. Intenta nuevamente.'; }

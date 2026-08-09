@@ -1,5 +1,6 @@
 <?php
 require_once 'includes/config.php';
+require_once 'includes/funciones_cupones.php';
 if (isLoggedIn()) { header('Location: ' . SITE_URL . '/index.php'); exit; }
 
 $error = '';
@@ -24,6 +25,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['nombre']      = $user['nombre'];
                 $_SESSION['email']       = $user['email'];
                 $_SESSION['rol']         = $user['rol'];
+
+                $stmtUser = $pdo->prepare("SELECT fecha_nacimiento FROM usuarios WHERE id = ?");
+                $stmtUser->execute([$_SESSION['usuario_id']]);
+                $userData = $stmtUser->fetch();
+
+                if ($userData && !empty($userData['fecha_nacimiento']) && $userData['fecha_nacimiento'] !== '0000-00-00') {
+                    $hoy = date('m-d');
+                    $cumpleUsuario = date('m-d', strtotime($userData['fecha_nacimiento']));
+
+                    if ($hoy === $cumpleUsuario) {
+                        $cupon_cumple_id = 2;
+
+                        if (asignarCuponAutomatico($pdo, $_SESSION['usuario_id'], $cupon_cumple_id, 7)) {
+                            $_SESSION['flash_message'] = "¡Feliz cumpleaños! Te hemos regalado un cupón de descuento especial en tu cuenta.";
+                            $_SESSION['flash_type'] = "success";
+                        }
+                    }
+                }
 
                 $pdo->prepare("UPDATE carrito SET usuario_id=?, session_id=NULL WHERE session_id=?")
                     ->execute([$user['id'], session_id()]);

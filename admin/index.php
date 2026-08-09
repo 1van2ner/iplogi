@@ -207,6 +207,7 @@ $totalUsuarios  = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol != '
 $ingresosTotal  = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM pedidos WHERE estado NOT IN ('cancelado')")->fetchColumn();
 $ingresosMes    = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM pedidos WHERE estado NOT IN ('cancelado') AND MONTH(creado_en)=MONTH(NOW()) AND YEAR(creado_en)=YEAR(NOW())")->fetchColumn();
 $stockBajo      = (int)$pdo->query("SELECT COUNT(*) FROM productos WHERE stock <= 5 AND activo=1")->fetchColumn();
+$totalCupones   = (int)$pdo->query("SELECT COUNT(*) FROM cupones")->fetchColumn();
 
 $ultPedidos = $pdo->query("SELECT p.*,u.nombre,u.apellido FROM pedidos p JOIN usuarios u ON p.usuario_id=u.id ORDER BY p.creado_en DESC LIMIT 8")->fetchAll();
 $topVentas  = $pdo->query("SELECT p.nombre,p.marca,c.icono,SUM(dp.cantidad) as total_vendido,SUM(dp.subtotal) as ingresos FROM detalle_pedidos dp JOIN productos p ON dp.producto_id=p.id JOIN categorias c ON p.categoria_id=c.id JOIN pedidos ped ON dp.pedido_id=ped.id WHERE ped.estado!='cancelado' GROUP BY p.id ORDER BY total_vendido DESC LIMIT 5")->fetchAll();
@@ -444,6 +445,10 @@ include '../includes/header.php';
       <a href="promociones.php"><i class="fas fa-fire"></i> Promociones del Mes</a>
       <a href="cupon.php" class="<?= $activeMenu === 'cupones' ? 'active' : '' ?>">
             <i class="fas fa-ticket"></i> Cupones
+      </a>
+      <a href="eventos.php" class="<?= $activeMenu === 'eventos' ? 'active' : '' ?>">
+        <i class="fas fa-calendar-day"></i> Eventos
+      </a>
       <a href="?tab=pedidos"    class="<?= $tab==='pedidos'   ?'active':'' ?>">
         <i class="fas fa-shopping-bag"></i> Pedidos
         <?php if($pedidosPend>0): ?>
@@ -494,6 +499,7 @@ include '../includes/header.php';
         ['fas fa-users','Clientes',$totalUsuarios,'#66bb6a','?tab=usuarios'],
         ['fas fa-dollar-sign','Ingresos Total',formatPrice($ingresosTotal),'#CEFF04','reportes.php'],
         ['fas fa-calendar-alt','Ingr. del Mes',formatPrice($ingresosMes),'#29b6f6','reportes.php'],
+        ['fas fa-ticket','Cupones',$totalCupones,'#a478ff','cupon.php'],
         ['fas fa-exclamation-triangle','Stock Bajo',$stockBajo.' prods','#ef5350','?tab=productos'],
       ];
       foreach($cards as [$ico,$lbl,$val,$col,$link]):

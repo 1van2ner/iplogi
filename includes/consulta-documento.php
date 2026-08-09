@@ -1,6 +1,6 @@
 <?php
 /**
- * Endpoint AJAX: consulta DNI o RUC en apiperu.dev y devuelve nombre/apellido
+ * Endpoint AJAX: consulta DNI o RUC en apiperu.dev y devuelve nombre/apellido y fecha de nacimiento
  * listos para autocompletar el formulario de registro.
  *
  * El token de apiperu.dev vive SOLO aquí (server-side), nunca se envía al navegador.
@@ -67,17 +67,21 @@ if ($tipo === 'DNI') {
     $apPaterno = trim($d['apellido_paterno'] ?? '');
     $apMaterno = trim($d['apellido_materno'] ?? '');
     $apellido  = trim($apPaterno . ' ' . $apMaterno);
+    
+    // Capturamos la fecha de nacimiento que devuelve apiperu.dev
+    $fechaNacimiento = trim($d['fecha_nacimiento'] ?? '');
 
     if ($nombres === '' && $apellido === '') {
         respuesta(false, [], 'No se encontraron datos para este DNI. Completa tus datos manualmente.');
     }
 
     respuesta(true, [
-        'nombre'   => $nombres,
-        'apellido' => $apellido,
+        'nombre'           => $nombres,
+        'apellido'         => $apellido,
+        'fecha_nacimiento' => $fechaNacimiento
     ]);
 } else {
-    // RUC: es una razón social (empresa), no una persona natural con nombre/apellido.
+    // RUC: razón social (empresa)
     $razonSocial = trim($d['nombre_o_razon_social'] ?? '');
     if ($razonSocial === '') {
         respuesta(false, [], 'No se encontraron datos para este RUC. Completa tus datos manualmente.');

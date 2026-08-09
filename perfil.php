@@ -101,6 +101,7 @@ include 'includes/header.php';
         <a href="?tab=datos"     class="<?= $tab==='datos'    ?'active':'' ?>"><i class="fas fa-user-edit"></i>  Mis datos</a>
         <a href="?tab=seguridad" class="<?= $tab==='seguridad'?'active':'' ?>"><i class="fas fa-lock"></i>       Contraseña</a>
         <a href="mis-pedidos.php">                                                <i class="fas fa-history"></i>    Mis Pedidos</a>
+        <a href="mis-cupones.php">                                                <i class="fas fa-gift"></i>      Mis Cupones</a>
         <?php if(isAdmin()): ?>
         <div style="height:1px;background:var(--borde);margin:10px 0;"></div>
         <a href="admin/index.php" style="color:var(--amarillo);font-weight:800;">
