@@ -30,6 +30,13 @@ include 'includes/header.php';
       <div class="order-detail-row"><span>Productos (<?= count($detalles) ?>)</span>
         <span><?php foreach($detalles as $d): ?><?= sanitize($d['nombre']) ?><?= !$d===end($detalles)?', ':'' ?><?php endforeach; ?></span>
       </div>
+      <div class="order-detail-row"><span>Estados de línea</span>
+        <span>
+          <?php foreach($detalles as $d): ?>
+            <?= sanitize($d['nombre']) ?>: <strong><?= sanitize($d['estado'] ?? 'pendiente') ?></strong><?= next($detalles) ? ', ' : '' ?>
+          <?php endforeach; ?>
+        </span>
+      </div>
       <div class="order-detail-row"><span>TOTAL</span><span><?= formatPrice($pedido['total']) ?></span></div>
     </div>
 

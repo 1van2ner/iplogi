@@ -775,6 +775,15 @@ include '../includes/header.php';
           <thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Entrega</th><th>Pago</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr></thead>
           <tbody>
           <?php foreach($pedidosAdmin as $ped): ?>
+          <?php
+            $entregaTipo = $ped['tipo_entrega'] ?? ($ped['tipo_envio'] ?? 'recojo_tienda');
+            $entregaTexto = match ($entregaTipo) {
+              'delivery' => '🚚 Delivery',
+              'provincia' => '🚚 Provincia',
+              'recojo_tienda' => '🏪 Tienda',
+              default => '🏪 Tienda'
+            };
+          ?>
           <tr>
             <td style="font-weight:800;color:var(--amarillo-texto);">#<?= str_pad($ped['id'],6,'0',STR_PAD_LEFT) ?></td>
             <td>
@@ -782,7 +791,7 @@ include '../includes/header.php';
               <div style="font-size:11px;color:var(--gris3);"><?= sanitize($ped['email']) ?></div>
             </td>
             <td style="font-weight:800;color:var(--amarillo-texto);"><?= formatPrice($ped['total']) ?></td>
-            <td style="font-size:12px;color:var(--gris3);"><?= $ped['tipo_envio']==='delivery'?'🚚 Delivery':'🏪 Tienda' ?></td>
+            <td style="font-size:12px;color:var(--gris3);"><?= $entregaTexto ?></td>
             <td style="font-size:12px;color:var(--gris3);text-transform:capitalize;"><?= sanitize($ped['metodo_pago']??'-') ?></td>
             <td><span class="eb eb-<?= $ped['estado'] ?>"><?= ucfirst($ped['estado']) ?></span></td>
             <td style="font-size:11px;color:var(--gris3);"><?= date('d/m/Y H:i',strtotime($ped['creado_en'])) ?></td>

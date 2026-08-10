@@ -194,8 +194,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
           $pr = $it['precio_oferta'] ?? $it['precio'];
           $subtotalItem = $pr * $it['cantidad'];
         }
-        $stmtDetalle = $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal)VALUES(?,?,?,?,?)");
-        $stmtDetalle->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem]);
+        $stmtDetalle = $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal,estado)VALUES(?,?,?,?,?,?)");
+        $stmtDetalle->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem,'pendiente']);
 
         $stmtStock = $pdo->prepare("UPDATE productos SET stock=stock-? WHERE id=? AND stock>=?");
         $stmtStock->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);

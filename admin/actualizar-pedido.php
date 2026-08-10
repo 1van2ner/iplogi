@@ -30,7 +30,7 @@ if (!$pedido) {
 
 switch ($accion) {
 
-    // ── Cambiar estado ──────────────────────────────────────
+    // ── Cambiar estado del pedido (global) ──────────────────────────────────────
     case 'estado':
         $estadosValidos = ['pendiente','confirmado','procesando','enviado','entregado','cancelado'];
         $nuevoEstado = $_POST['estado'] ?? '';
@@ -67,6 +67,35 @@ switch ($accion) {
             'success' => true,
             'message' => 'Estado actualizado a: ' . ucfirst($nuevoEstado),
             'estado'  => $nuevoEstado,
+        ]);
+        break;
+
+    // ── Cambiar estado de una línea de producto ──────────────────────────────────────
+    case 'producto_estado':
+        $detalleId = (int)($_POST['detalle_id'] ?? 0);
+        $nuevoEstado = $_POST['estado'] ?? '';
+        $estadosValidos = ['pendiente','confirmado','procesando','enviado','entregado','cancelado'];
+
+        if (!$detalleId || !in_array($nuevoEstado, $estadosValidos, true)) {
+            echo json_encode(['success'=>false,'message'=>'Detalle o estado inválido']);
+            exit;
+        }
+
+        $check = $pdo->prepare("SELECT id FROM detalle_pedidos WHERE id = ? AND pedido_id = ?");
+        $check->execute([$detalleId, $pedidoId]);
+        if (!$check->fetch()) {
+            echo json_encode(['success'=>false,'message'=>'Detalle de pedido no encontrado']);
+            exit;
+        }
+
+        $pdo->prepare("UPDATE detalle_pedidos SET estado = ? WHERE id = ? AND pedido_id = ?")
+            ->execute([$nuevoEstado, $detalleId, $pedidoId]);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Estado de producto actualizado',
+            'estado' => $nuevoEstado,
+            'detalle_id' => $detalleId,
         ]);
         break;
 

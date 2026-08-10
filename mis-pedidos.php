@@ -9,7 +9,12 @@ try {
 
 $pedidos = [];
 try {
-    $stmt = $pdo->query("SELECT p.*, u.nombre, u.apellido FROM pedidos p JOIN usuarios u ON p.usuario_id = u.id ORDER BY p.creado_en DESC LIMIT 15");
+    $stmt = $pdo->query(
+        "SELECT p.id, p.total, p.estado, p.metodo_pago, p.tipo_entrega, p.creado_en, u.nombre, u.apellido
+         FROM pedidos p
+         JOIN usuarios u ON p.usuario_id = u.id
+         ORDER BY p.creado_en DESC LIMIT 15"
+    );
     $pedidos = $stmt->fetchAll();
 } catch (Exception $e) {
     // Si falla, se queda vacío
@@ -83,7 +88,7 @@ include $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/header.php';
                             <!-- BOTÓN SEGUIR -->
                             <td style="padding: 16px 20px; text-align: center;">
                                 <button type="button" 
-                                        onclick="verSeguimiento('<?= htmlspecialchars($p['codigo']) ?>', '<?= htmlspecialchars($p['estado']) ?>')" 
+                                        onclick="verSeguimiento('<?= htmlspecialchars((string)$p['id']) ?>', '<?= htmlspecialchars($p['estado']) ?>')" 
                                         style="background: linear-gradient(135deg, #c8ff00, #c8ff00); color: #000000; border: none; padding: 9px 20px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
                                     <i class="fas fa-route" style="color: #000000;"></i> Seguir
                                 </button>
