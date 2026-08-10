@@ -51,8 +51,9 @@ foreach ($items as $it) {
     if (!empty($it['es_canje_puntos'])) {
         continue;
     }
-    $precioItem = ($it['precio_oferta'] ?? $it['precio']);
-    $subtotal += $precioItem * $it['cantidad'];
+  $precioItem = ($it['precio_oferta'] ?? $it['precio']);
+  $precioItem = precioFinal($precioItem);
+  $subtotal += $precioItem * $it['cantidad'];
 }
 
 // Validación frontal de stock para evitar que el checkout llegue a una transacción
@@ -218,6 +219,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
           $subtotalItem = 0;
         } else {
           $pr = $it['precio_oferta'] ?? $it['precio'];
+          $pr = precioFinal($pr);
           $subtotalItem = $pr * $it['cantidad'];
         }
         if ($detalleHasEstado) {
@@ -425,7 +427,10 @@ $pageTitle='Finalizar Compra'; include 'includes/header.php';
     <div>
       <div class="checkout-summary-wrap">
         <h3><i class="fas fa-receipt" style="color:#6b7300;"></i> Resumen del pedido</h3>
-        <?php foreach($items as $it): $pr=$it['precio_oferta']??$it['precio']; ?>
+          <?php foreach($items as $it):
+            $pr = $it['precio_oferta'] ?? $it['precio'];
+            $pr = precioFinal($pr);
+          ?>
         <div class="checkout-item">
           <div class="checkout-item-img">
             <?php if(!empty($it['imagen'])): ?><img src="<?=SITE_URL?>/<?=sanitize($it['imagen'])?>" alt="" style="width:100%;height:100%;object-fit:contain;padding:4px;">
