@@ -188,14 +188,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
       $pedidoId = $pdo->lastInsertId();
       
-      // Calcular puntos a deducir
-      $puntosDeducir = 0;
-      foreach ($items as $it) {
-        if ($it['es_canje_puntos']) {
-          $puntosDeducir += (int)($it['producto_canje_puntos'] ?? 0) * $it['cantidad'];
-        }
-      }
-      
       foreach ($items as $it) {
         if ($it['es_canje_puntos']) {
           $pr = 0;
@@ -212,26 +204,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         if ($stmtStock->rowCount() !== 1) {
           throw new Exception('Stock insuficiente para ' . sanitize($it['nombre']) . '.');
         }
-      }
-      
-      // Deducir puntos si es necesario y registrar en control_puntos
-      if ($puntosDeducir > 0) {
-        // Obtener puntos actuales del usuario
-        $stmtPuntosActuales = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ?");
-        $stmtPuntosActuales->execute([$_SESSION['usuario_id']]);
-        $puntosActuales = (int)$stmtPuntosActuales->fetchColumn();
-        
-        // Calcular nuevos puntos (no permitir negativos)
-        $puntosNuevos = max(0, $puntosActuales - $puntosDeducir);
-        
-        // Actualizar puntos del usuario
-        $pdo->prepare("UPDATE usuarios SET puntos = ? WHERE id = ?")
-          ->execute([$puntosNuevos, $_SESSION['usuario_id']]);
-        
-        // Registrar movimiento en control_puntos
-        $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en)
-          VALUES (?, ?, ?, 'CANJE', 'Canje de puntos en compra #', NOW())")
-          ->execute([$_SESSION['usuario_id'], null, -$puntosDeducir]);
       }
       
       $pdo->prepare("DELETE FROM carrito WHERE usuario_id=?")->execute([$_SESSION['usuario_id']]);

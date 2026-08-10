@@ -56,7 +56,7 @@ switch ($action) {
             exit;
         }
 
-        // Validar puntos si es canje
+        // Validar y descontar puntos si es canje
         if ($usarPuntos) {
             if (!isLoggedIn()) {
                 echo json_encode(['success' => false, 'message' => 'Debes iniciar sesión para canjear por puntos']);
@@ -66,14 +66,51 @@ switch ($action) {
                 echo json_encode(['success' => false, 'message' => 'Este producto no se puede canjear por puntos']);
                 exit;
             }
-            $userStmt = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ?");
-            $userStmt->execute([$_SESSION['usuario_id']]);
-            $userRow = $userStmt->fetch();
-            $userPoints = (int)($userRow['puntos'] ?? 0);
-            $puntosNecesarios = (int)($producto['canje_puntos'] * $cantidad);
-            if ($userPoints < $puntosNecesarios) {
-                echo json_encode(['success' => false, 'message' => 'No tienes suficientes puntos. Necesitas ' . $puntosNecesarios . ' puntos.']);
-                exit;
+
+            // Revisar si ya existe en carrito (uso de puntos) para deducir sólo la diferencia
+            $w = getWhere();
+            $check = $pdo->prepare("SELECT id, cantidad, es_canje_puntos FROM carrito WHERE producto_id = ? AND {$w['campo']} = ? AND es_canje_puntos = 1");
+            $check->execute([$productoId, $w['valor']]);
+            $existing = $check->fetch();
+
+            $puntosPorUnidad = (int)$producto['canje_puntos'];
+            $puntosNecesariosTotal = $puntosPorUnidad * $cantidad;
+            $puntosADescontar = $puntosNecesariosTotal;
+            if ($existing) {
+                // Si ya estaba canjeado con puntos, solo descontar la diferencia (si aumenta cantidad)
+                $existQty = (int)$existing['cantidad'];
+                if ($cantidad <= $existQty) {
+                    $puntosADescontar = 0;
+                } else {
+                    $puntosADescontar = $puntosPorUnidad * ($cantidad - $existQty);
+                }
+            }
+
+            if ($puntosADescontar > 0) {
+                $pdo->beginTransaction();
+                try {
+                    $userStmt = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ? FOR UPDATE");
+                    $userStmt->execute([$_SESSION['usuario_id']]);
+                    $userRow = $userStmt->fetch();
+                    $userPoints = (int)($userRow['puntos'] ?? 0);
+
+                    if ($userPoints < $puntosADescontar) {
+                        $pdo->rollBack();
+                        echo json_encode(['success' => false, 'message' => 'No tienes suficientes puntos. Necesitas ' . $puntosADescontar . ' puntos adicionales.']);
+                        exit;
+                    }
+
+                    $upd = $pdo->prepare("UPDATE usuarios SET puntos = puntos - ? WHERE id = ?");
+                    $upd->execute([$puntosADescontar, $_SESSION['usuario_id']]);
+                    // Registrar movimiento de puntos (CANJE)
+                    $ins = $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en) VALUES (?, ?, ?, 'CANJE', ?, NOW())");
+                    $ins->execute([$_SESSION['usuario_id'], $productoId, -$puntosADescontar, 'Canje en carrito']);
+                    $pdo->commit();
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    echo json_encode(['success' => false, 'message' => 'Error al procesar puntos: ' . $e->getMessage()]);
+                    exit;
+                }
             }
         }
 
@@ -97,6 +134,14 @@ switch ($action) {
                 }
             }
         } catch (Exception $e) {
+            // Si falló insertar/actualizar, intentar revertir puntos descontados (si aplica)
+            if ($usarPuntos && !empty($_SESSION['usuario_id']) && isset($puntosADescontar) && $puntosADescontar > 0) {
+                try {
+                    $pdo->prepare("UPDATE usuarios SET puntos = puntos + ? WHERE id = ?")->execute([$puntosADescontar, $_SESSION['usuario_id']]);
+                } catch (Exception $ee) {
+                    // No podemos hacer mucho si el reintegro falla
+                }
+            }
             echo json_encode(['success' => false, 'message' => $e->getMessage()]);
             exit;
         }
@@ -115,7 +160,7 @@ switch ($action) {
         }
 
         $w = getWhere();
-        $row = $pdo->prepare("SELECT c.id, p.stock FROM carrito c JOIN productos p ON c.producto_id = p.id WHERE c.id = ? AND c.{$w['campo']} = ?");
+        $row = $pdo->prepare("SELECT c.id, c.producto_id, c.cantidad, c.es_canje_puntos, p.stock FROM carrito c JOIN productos p ON c.producto_id = p.id WHERE c.id = ? AND c.{$w['campo']} = ?");
         $row->execute([$carritoId, $w['valor']]);
         $item = $row->fetch();
 
@@ -125,7 +170,69 @@ switch ($action) {
         }
 
         $cantidad = min($cantidad, $item['stock']);
-        $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$cantidad, $carritoId]);
+
+        // Si este item es canje por puntos, ajustar puntos del usuario según la diferencia
+        $isCanje = (int)($item['es_canje_puntos'] ?? 0);
+        if ($isCanje) {
+            if (!isLoggedIn()) {
+                echo json_encode(['success' => false, 'message' => 'Operación no permitida']);
+                exit;
+            }
+            // obtener canje_puntos por unidad
+            $p = $pdo->prepare("SELECT p.canje_puntos FROM carrito c JOIN productos p ON c.producto_id = p.id WHERE c.id = ? AND c.{$w['campo']} = ?");
+            $p->execute([$carritoId, $w['valor']]);
+            $prod = $p->fetch();
+            $puntosPorUnidad = (int)($prod['canje_puntos'] ?? 0);
+
+            // cantidad actual en carrito
+            $q = $pdo->prepare("SELECT cantidad FROM carrito WHERE id = ?");
+            $q->execute([$carritoId]);
+            $old = (int)($q->fetchColumn() ?? 0);
+
+            if ($cantidad > $old) {
+                $delta = $cantidad - $old;
+                $puntosADescontar = $delta * $puntosPorUnidad;
+                $pdo->beginTransaction();
+                try {
+                    $userStmt = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ? FOR UPDATE");
+                    $userStmt->execute([$_SESSION['usuario_id']]);
+                    $userPoints = (int)($userStmt->fetchColumn() ?? 0);
+                    if ($userPoints < $puntosADescontar) {
+                        $pdo->rollBack();
+                        echo json_encode(['success' => false, 'message' => 'No tienes suficientes puntos para aumentar la cantidad']);
+                        exit;
+                    }
+                    $pdo->prepare("UPDATE usuarios SET puntos = puntos - ? WHERE id = ?")->execute([$puntosADescontar, $_SESSION['usuario_id']]);
+                    $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en) VALUES (?, ?, ?, 'CANJE', ?, NOW())")->execute([$_SESSION['usuario_id'], $item['producto_id'] ?? null, -$puntosADescontar, 'Canje al aumentar cantidad']);
+                    $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$cantidad, $carritoId]);
+                    $pdo->commit();
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    echo json_encode(['success' => false, 'message' => 'Error al actualizar puntos: ' . $e->getMessage()]);
+                    exit;
+                }
+            } elseif ($cantidad < $old) {
+                // devolver puntos por la reducción
+                $delta = $old - $cantidad;
+                $puntosADevolver = $delta * $puntosPorUnidad;
+                try {
+                    $pdo->beginTransaction();
+                    $pdo->prepare("UPDATE usuarios SET puntos = puntos + ? WHERE id = ?")->execute([$puntosADevolver, $_SESSION['usuario_id']]);
+                    $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en) VALUES (?, ?, ?, 'REINTEGRO', ?, NOW())")->execute([$_SESSION['usuario_id'], $item['producto_id'] ?? null, $puntosADevolver, 'Reintegro al reducir cantidad']);
+                    $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$cantidad, $carritoId]);
+                    $pdo->commit();
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    echo json_encode(['success' => false, 'message' => 'Error al devolver puntos: ' . $e->getMessage()]);
+                    exit;
+                }
+            } else {
+                // misma cantidad
+                $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$cantidad, $carritoId]);
+            }
+        } else {
+            $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$cantidad, $carritoId]);
+        }
 
         echo json_encode(['success' => true, 'cart_count' => getCount($pdo)]);
         break;
@@ -139,6 +246,29 @@ switch ($action) {
         }
 
         $w = getWhere();
+        // Si el item era canje por puntos, devolver puntos al usuario
+        $row = $pdo->prepare("SELECT c.cantidad, c.es_canje_puntos, p.canje_puntos FROM carrito c JOIN productos p ON c.producto_id = p.id WHERE c.id = ? AND c.{$w['campo']} = ?");
+        $row->execute([$carritoId, $w['valor']]);
+        $r = $row->fetch();
+        if ($r && (int)$r['es_canje_puntos'] === 1) {
+            if (isLoggedIn()) {
+                $puntos = (int)$r['cantidad'] * (int)($r['canje_puntos'] ?? 0);
+                try {
+                    $pdo->beginTransaction();
+                    $pdo->prepare("UPDATE usuarios SET puntos = puntos + ? WHERE id = ?")->execute([$puntos, $_SESSION['usuario_id']]);
+                    $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en) VALUES (?, NULL, ?, 'REINTEGRO', ?, NOW())")->execute([$_SESSION['usuario_id'], $puntos, 'Reintegro por eliminación de carrito']);
+                    $pdo->prepare("DELETE FROM carrito WHERE id = ? AND {$w['campo']} = ?")->execute([$carritoId, $w['valor']]);
+                    $pdo->commit();
+                    echo json_encode(['success' => true, 'cart_count' => getCount($pdo)]);
+                    exit;
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    echo json_encode(['success' => false, 'message' => 'Error al devolver puntos: ' . $e->getMessage()]);
+                    exit;
+                }
+            }
+        }
+
         $pdo->prepare("DELETE FROM carrito WHERE id = ? AND {$w['campo']} = ?")->execute([$carritoId, $w['valor']]);
 
         echo json_encode(['success' => true, 'cart_count' => getCount($pdo)]);
@@ -147,6 +277,28 @@ switch ($action) {
     // ── VACIAR CARRITO ────────────────────────────────────────
     case 'vaciar':
         $w = getWhere();
+        // Devolver puntos de todos los items canjeados
+        if (isLoggedIn()) {
+            $sum = $pdo->prepare("SELECT COALESCE(SUM(c.cantidad * p.canje_puntos),0) FROM carrito c JOIN productos p ON c.producto_id = p.id WHERE c.{$w['campo']} = ? AND c.es_canje_puntos = 1");
+            $sum->execute([$w['valor']]);
+            $puntos = (int)$sum->fetchColumn();
+            if ($puntos > 0) {
+                try {
+                    $pdo->beginTransaction();
+                    $pdo->prepare("UPDATE usuarios SET puntos = puntos + ? WHERE id = ?")->execute([$puntos, $_SESSION['usuario_id']]);
+                    $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en) VALUES (?, NULL, ?, 'REINTEGRO', ?, NOW())")->execute([$_SESSION['usuario_id'], $puntos, 'Reintegro por vaciar carrito']);
+                    $pdo->prepare("DELETE FROM carrito WHERE {$w['campo']} = ?")->execute([$w['valor']]);
+                    $pdo->commit();
+                    echo json_encode(['success' => true, 'cart_count' => 0]);
+                    exit;
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    echo json_encode(['success' => false, 'message' => 'Error al devolver puntos: ' . $e->getMessage()]);
+                    exit;
+                }
+            }
+        }
+
         $pdo->prepare("DELETE FROM carrito WHERE {$w['campo']} = ?")->execute([$w['valor']]);
         echo json_encode(['success' => true, 'cart_count' => 0]);
         break;
@@ -154,7 +306,7 @@ switch ($action) {
     // ── RESUMEN (totales dinámicos) ───────────────────────────
     case 'resumen':
         $w = getWhere();
-        $stmt = $pdo->prepare("SELECT c.cantidad, p.precio, p.precio_oferta
+        $stmt = $pdo->prepare("SELECT c.cantidad, c.es_canje_puntos, p.precio, p.precio_oferta
                                 FROM carrito c
                                 JOIN productos p ON c.producto_id = p.id
                                 WHERE c.{$w['campo']} = ? AND p.activo = 1");
@@ -163,6 +315,8 @@ switch ($action) {
 
         $subtotal = 0;
         foreach ($rows as $r) {
+            // Omitir del subtotal los items que se canjean por puntos
+            if (!empty($r['es_canje_puntos'])) continue;
             $precio    = ($r['precio_oferta'] !== null && $r['precio_oferta'] > 0) ? $r['precio_oferta'] : $r['precio'];
             $precio    = precioFinal($precio);
             $subtotal += $precio * $r['cantidad'];
