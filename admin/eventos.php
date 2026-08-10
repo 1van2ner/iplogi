@@ -25,6 +25,15 @@ $s = $pdo->prepare("SELECT * FROM usuarios WHERE id=?");
 $s->execute([$_SESSION['usuario_id']]);
 $adminUser = $s->fetch();
 
+$blackFridayActive = getAppSetting('black_friday_active', '1') === '1';
+$savedMessage = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_black_friday'])) {
+    $newValue = isset($_POST['black_friday_active']) && $_POST['black_friday_active'] === '1' ? '1' : '0';
+    setBlackFridayActive($newValue === '1');
+    $blackFridayActive = $newValue === '1';
+    $savedMessage = 'Visibilidad de Black Friday guardada correctamente.';
+}
+
 include '../includes/header.php';
 ?>
 
@@ -118,21 +127,32 @@ include '../includes/header.php';
         <h3><i class="fas fa-calendar-check" style="color:var(--amarillo-texto);"></i> Eventos programados</h3>
       </div>
       <div style="padding:28px;">
-        <div class="event-status-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <div>
-            <div style="font-size:15px;font-weight:700;color:var(--blanco);">Black Friday</div>
-            <div style="font-size:12px;margin-top:4px;color:var(--gris3);">Visibilidad del botón principal</div>
+        <?php if ($savedMessage): ?>
+          <div style="margin-bottom:16px;color:#D1FF05;font-size:13px;font-weight:700;">
+            <?= sanitize($savedMessage) ?>
           </div>
-          <label class="event-switch" style="display:inline-flex;align-items:center;gap:12px;cursor:pointer;">
-            <span class="switch-off" style="font-size:12px;color:var(--gris3);font-weight:800;">OFF</span>
-            <span class="switch-shell">
-              <input type="checkbox" id="bf-event-switch" class="event-switch-input" aria-label="Activar Black Friday">
-              <span class="switch-track"></span>
-              <span class="switch-thumb"></span>
-            </span>
-            <span class="switch-on" style="font-size:12px;color:var(--amarillo-texto);font-weight:800;">ON</span>
-          </label>
-        </div>
+        <?php endif; ?>
+        <form method="POST" style="margin:0;">
+          <div class="event-status-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:14px;">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--blanco);">Black Friday</div>
+              <div style="font-size:12px;margin-top:4px;color:var(--gris3);">Visibilidad del botón principal</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+              <label class="event-switch" style="display:inline-flex;align-items:center;gap:12px;cursor:pointer;">
+                <span class="switch-off" style="font-size:12px;color:var(--gris3);font-weight:800;">OFF</span>
+                <span class="switch-shell">
+                  <input type="hidden" name="black_friday_active" value="0">
+                  <input type="checkbox" id="bf-event-switch" name="black_friday_active" value="1" class="event-switch-input" aria-label="Activar Black Friday" <?= $blackFridayActive ? 'checked' : '' ?> >
+                  <span class="switch-track"></span>
+                  <span class="switch-thumb"></span>
+                </span>
+                <span class="switch-on" style="font-size:12px;color:var(--amarillo-texto);font-weight:800;">ON</span>
+              </label>
+              <button type="submit" name="save_black_friday" style="border:none;background:var(--amarillo);color:#000;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;">Guardar cambios</button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   </main>

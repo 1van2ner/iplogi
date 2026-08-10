@@ -174,7 +174,8 @@ if (isset($_SESSION['flash_message'])) {
         <li><a href="<?= SITE_URL ?>/productos.php?categoria=9"><i class="fas fa-bolt"></i> Energía</a></li>
         <li><a href="<?= SITE_URL ?>/contacto.php" <?= $currentPage === 'contacto.php' ? 'class="active"' : '' ?>>Contacto</a></li>
       </ul>
-      <a href="<?= SITE_URL ?>/Black_friday.php" class="nav-black-friday-float">
+      <?php $bfActive = isBlackFridayActive(); ?>
+      <a href="<?= SITE_URL ?>/Black_friday.php" class="nav-black-friday-float" style="<?= $bfActive ? '' : 'display:none;' ?>">
         <img src="<?= SITE_URL ?>/assets/img/Black_friday.jgp.jpg" alt="Black Friday">
       </a>
     </div>

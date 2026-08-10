@@ -23,10 +23,10 @@ $items = $s->fetchAll();
 
 $subtotal = 0;
 foreach ($items as $item) {
-    if ($item['es_canje_puntos']) {
+    if (!empty($item['es_canje_puntos'])) {
         continue;
     }
-    $precio    = ($item['precio_oferta'] && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
+    $precio    = (($item['precio_oferta'] ?? 0) && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
     $precio    = precioFinal($precio);
     $subtotal += $precio * $item['cantidad'];
 }
@@ -214,10 +214,10 @@ include 'includes/header.php';
 
         <!-- Filas -->
         <?php foreach ($items as $item):
-          if ($item['es_canje_puntos']) {
+          if (!empty($item['es_canje_puntos'])) {
               $precio = 0;
           } else {
-              $precio = ($item['precio_oferta'] && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
+              $precio = (($item['precio_oferta'] ?? 0) && $item['precio_oferta'] > 0) ? $item['precio_oferta'] : $item['precio'];
               $precio = precioFinal($precio);
           }
           $precioTachado = precioFinal($item['precio']);
@@ -240,9 +240,9 @@ include 'includes/header.php';
               <a href="<?= SITE_URL ?>/producto.php?id=<?= $item['producto_id'] ?>"><?= sanitize($item['nombre']) ?></a>
             </div>
             <div class="c-marca"><?= sanitize($item['marca']) ?></div>
-            <?php if ($item['es_canje_puntos']): ?>
+            <?php if (!empty($item['es_canje_puntos'])): ?>
               <div style="font-size:12px;color:#6b7300;font-weight:700;">Canjeado con <?= number_format($item['puntos_canjeados'] ?? 0) ?> pts</div>
-            <?php elseif ($item['precio_oferta'] && $item['precio_oferta'] > 0): ?>
+            <?php elseif (!empty($item['precio_oferta']) && $item['precio_oferta'] > 0): ?>
               <div class="c-tachado"><?= formatPrice($precioTachado) ?></div>
             <?php endif; ?>
           </div>

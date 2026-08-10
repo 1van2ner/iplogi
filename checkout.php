@@ -32,7 +32,7 @@ if (empty($items)) { header('Location: '.SITE_URL.'/carrito.php'); exit; }
 
 $subtotal = 0;
 foreach ($items as $it) {
-    if ($it['es_canje_puntos']) {
+    if (!empty($it['es_canje_puntos'])) {
         continue;
     }
     $precioItem = ($it['precio_oferta'] ?? $it['precio']);

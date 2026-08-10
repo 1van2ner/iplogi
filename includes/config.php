@@ -4,13 +4,16 @@
 // Archivo: includes/config.php
 // ============================================================
 
-if ($_SERVER['HTTP_HOST'] === 'localhost') {
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$localHosts = ['localhost', '127.0.0.1', '::1'];
+if (in_array(preg_replace('/:\\d+$/', '', strtolower($host)), $localHosts, true)) {
     // ── ENTORNO LOCAL (XAMPP) ──
     define('DB_HOST', 'localhost');
     define('DB_USER', 'root');
     define('DB_PASS', '');
     define('DB_NAME', 'iptecnologiadb');
-    define('SITE_URL', 'http://localhost/iptecnologia');
+    define('SITE_URL', $scheme . '://' . $host . '/iptecnologia');
 } else {
     // ── ENTORNO PRODUCCIÓN (Banahosting) ──
     define('DB_HOST', 'localhost');
@@ -136,6 +139,44 @@ function sanitize($input) {
 function generateOrderCode() {
     return 'TS-' . strtoupper(substr(md5(uniqid()), 0, 8));
 }
+
+function ensureAppSettingsTable() {
+    $pdo = getDB();
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `app_settings` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `clave` VARCHAR(100) NOT NULL UNIQUE,
+        `valor` TEXT NOT NULL,
+        `actualizado_en` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+}
+
+function getAppSetting($clave, $default = null) {
+    ensureAppSettingsTable();
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT valor FROM app_settings WHERE clave = ? LIMIT 1");
+    $stmt->execute([$clave]);
+    $valor = $stmt->fetchColumn();
+    return $valor !== false ? $valor : $default;
+}
+
+function setAppSetting($clave, $valor) {
+    ensureAppSettingsTable();
+    $pdo = getDB();
+    $stmt = $pdo->prepare(
+        "INSERT INTO app_settings (clave, valor) VALUES (?, ?) " .
+        "ON DUPLICATE KEY UPDATE valor = VALUES(valor)"
+    );
+    $stmt->execute([$clave, $valor]);
+}
+
+function isBlackFridayActive() {
+    return getAppSetting('black_friday_active', '1') === '1';
+}
+
+function setBlackFridayActive($active) {
+    setAppSetting('black_friday_active', $active ? '1' : '0');
+}
+
 // Devuelve el HTML de precio + botón, o un bloque de "inicia sesión" si no hay login
 function renderPrecioCarrito($p, $precio, $desc, $idProducto) {
     if (!isLoggedIn()) {
