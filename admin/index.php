@@ -121,7 +121,7 @@ $pdo->prepare("INSERT INTO productos (categoria_id, nombre, marca, modelo, descr
         $cel  = sanitize($_POST['u_celular']         ?? '');
         $dir  = sanitize($_POST['u_direccion']       ?? '');
         $fnac = sanitize($_POST['u_fnac']            ?? '');
-        $rol  = in_array($_POST['u_rol']??'',['admin','cliente_final','tecnico','proyectista','distribuidor']) ? $_POST['u_rol'] : 'cliente_final';
+        $rol  = in_array($_POST['u_rol']??'',['admin','cliente_final','tecnico','proyectista','distribuidor','motorizado']) ? $_POST['u_rol'] : 'cliente_final';
         $acti = isset($_POST['u_activo']) ? 1 : 0;
         $verif = isset($_POST['u_verificado']) ? 1 : 0;
         $puntos = max(0, (int)($_POST['u_puntos'] ?? 0));
@@ -677,6 +677,7 @@ include '../includes/header.php';
         <option value="tecnico"       <?= $rolFil==='tecnico'      ?'selected':'' ?>>Técnico</option>
         <option value="proyectista"   <?= $rolFil==='proyectista'  ?'selected':'' ?>>Proyectista</option>
         <option value="distribuidor"  <?= $rolFil==='distribuidor' ?'selected':'' ?>>Distribuidor</option>
+        <option value="motorizado"    <?= $rolFil==='motorizado'   ?'selected':'' ?>>Motorizado</option>
         <option value="admin"         <?= $rolFil==='admin'        ?'selected':'' ?>>Admins</option>
       </select>
       <button type="submit" style="padding:8px 16px;background:var(--amarillo);color:#000;border:none;border-radius:var(--r);font-size:13px;font-weight:800;cursor:pointer;"><i class="fas fa-search"></i></button>
@@ -716,9 +717,10 @@ include '../includes/header.php';
                 'tecnico'       => ['rgba(2,136,209,.2)',  '#4fc3f7'],
                 'proyectista'   => ['rgba(255,152,0,.2)',  '#ffb74d'],
                 'distribuidor'  => ['rgba(67,160,71,.2)',  '#81c784'],
+                'motorizado'    => ['rgba(255,87,34,.2)',  '#ffb399'],
               ];
               $rc = $rolColores[$u['rol']] ?? ['rgba(255,255,255,.1)', 'var(--gris2)'];
-              $etiquetasRol = ['admin'=>'ADMIN','cliente_final'=>'CLIENTE FINAL','tecnico'=>'TÉCNICO','proyectista'=>'PROYECTISTA','distribuidor'=>'DISTRIBUIDOR','cliente'=>'CLIENTE'];
+              $etiquetasRol = ['admin'=>'ADMIN','cliente_final'=>'CLIENTE FINAL','tecnico'=>'TÉCNICO','proyectista'=>'PROYECTISTA','distribuidor'=>'DISTRIBUIDOR','motorizado'=>'MOTORIZADO','cliente'=>'CLIENTE'];
             ?>
             <td><span style="padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap;background:<?= $rc[0] ?>;color:<?= $rc[1] ?>;"><?= $etiquetasRol[$u['rol']] ?? strtoupper($u['rol']) ?></span></td>
             <td style="text-align:center;">
@@ -946,6 +948,7 @@ renderOptsModal($raicesM);
             <option value="tecnico">Técnico</option>
             <option value="proyectista">Proyectista</option>
             <option value="distribuidor">Distribuidor</option>
+            <option value="motorizado">Motorizado</option>
             <option value="admin">Administrador</option>
           </select>
         </div>
