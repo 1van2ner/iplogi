@@ -5,6 +5,21 @@ header('Content-Type: application/json');
 $pdo    = getDB();
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+// Asegurar que exista la tabla control_puntos (para auditoría de movimientos)
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS control_puntos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        usuario_id INT NOT NULL,
+        producto_id INT NULL,
+        puntos INT NOT NULL,
+        tipo_movimiento VARCHAR(32) NOT NULL,
+        descripcion TEXT NULL,
+        creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+} catch (Exception $e) {
+    // Si falla, continuar y dejar que las inserciones lancen el error normal
+}
+
 // ── Ensure carrito table has es_canje_puntos column ──
 try {
     $col = $pdo->query("SHOW COLUMNS FROM carrito LIKE 'es_canje_puntos'")->fetch(PDO::FETCH_ASSOC);

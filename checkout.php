@@ -31,6 +31,21 @@ $s->execute([$_SESSION['usuario_id']]);
 $items = $s->fetchAll();
 if (empty($items)) { header('Location: '.SITE_URL.'/carrito.php'); exit; }
 
+// Asegurar que exista la tabla control_puntos (para auditoría de movimientos)
+try {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS control_puntos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    producto_id INT NULL,
+    puntos INT NOT NULL,
+    tipo_movimiento VARCHAR(32) NOT NULL,
+    descripcion TEXT NULL,
+    creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+} catch (Exception $e) {
+  // No hacemos nada; si falla, la inserción posterior lanzará el error y se registrará en el log
+}
+
 $subtotal = 0;
 foreach ($items as $it) {
     if (!empty($it['es_canje_puntos'])) {
@@ -174,20 +189,29 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     try {
       $pdo->beginTransaction();
 
-      // La tabla 'pedidos' viva en esta BD no tiene estas columnas antiguas:
-      // codigo, subtotal, envio, tipo_envio, direccion_entrega, distrito_entrega, referencia, notas.
-      // Por eso el INSERT original recibe un error SQL y cae al catch genérico.
-      $stmtPedido = $pdo->prepare("INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, tipo_entrega, creado_en)
-          VALUES (?, ?, 'pendiente', ?, ?, NOW())");
-      $stmtPedido->execute([
-        $_SESSION['usuario_id'],
-        $total,
-        $metodoPago,
-        $tipoEnvio,
-      ]);
+      // Adaptar INSERT según esquema real de la tabla `pedidos`.
+      $colsInfo = $pdo->query("SHOW COLUMNS FROM pedidos")->fetchAll(PDO::FETCH_ASSOC);
+      $hasEstado = false;
+      foreach ($colsInfo as $col) {
+        if (($col['Field'] ?? '') === 'estado') { $hasEstado = true; break; }
+      }
+
+      if ($hasEstado) {
+        $stmtPedido = $pdo->prepare("INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, tipo_entrega, creado_en) VALUES (?, ?, 'pendiente', ?, ?, NOW())");
+        $stmtPedido->execute([$_SESSION['usuario_id'], $total, $metodoPago, $tipoEnvio]);
+      } else {
+        // INSERT sin columna 'estado'
+        $stmtPedido = $pdo->prepare("INSERT INTO pedidos (usuario_id, total, metodo_pago, tipo_entrega, creado_en) VALUES (?, ?, ?, ?, NOW())");
+        $stmtPedido->execute([$_SESSION['usuario_id'], $total, $metodoPago, $tipoEnvio]);
+      }
 
       $pedidoId = $pdo->lastInsertId();
       
+      // Comprobar si `detalle_pedidos` tiene columna `estado`
+      $colsDetalle = $pdo->query("SHOW COLUMNS FROM detalle_pedidos")->fetchAll(PDO::FETCH_ASSOC);
+      $detalleHasEstado = false;
+      foreach ($colsDetalle as $col) { if (($col['Field'] ?? '') === 'estado') { $detalleHasEstado = true; break; } }
+
       foreach ($items as $it) {
         if ($it['es_canje_puntos']) {
           $pr = 0;
@@ -196,14 +220,26 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
           $pr = $it['precio_oferta'] ?? $it['precio'];
           $subtotalItem = $pr * $it['cantidad'];
         }
-        $stmtDetalle = $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal,estado)VALUES(?,?,?,?,?,?)");
-        $stmtDetalle->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem,'pendiente']);
+        if ($detalleHasEstado) {
+          $stmtDetalle = $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal,estado)VALUES(?,?,?,?,?,?)");
+          $stmtDetalle->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem,'pendiente']);
+        } else {
+          $stmtDetalle = $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal)VALUES(?,?,?,?,?)");
+          $stmtDetalle->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem]);
+        }
 
         $stmtStock = $pdo->prepare("UPDATE productos SET stock=stock-? WHERE id=? AND stock>=?");
         $stmtStock->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);
         if ($stmtStock->rowCount() !== 1) {
           throw new Exception('Stock insuficiente para ' . sanitize($it['nombre']) . '.');
         }
+      }
+      // Asignar puntos por compra: 1 punto por cada S/10 del total (solo si la transacción sigue sin errores)
+      $puntosGanados = (int)floor($total / 10);
+      if ($puntosGanados > 0) {
+        $pdo->prepare("UPDATE usuarios SET puntos = puntos + ? WHERE id = ?")->execute([$puntosGanados, $_SESSION['usuario_id']]);
+        $pdo->prepare("INSERT INTO control_puntos (usuario_id, producto_id, puntos, tipo_movimiento, descripcion, creado_en) VALUES (?, NULL, ?, 'GANANCIA', ?, NOW())")
+          ->execute([$_SESSION['usuario_id'], $puntosGanados, 'Puntos por compra #'.$pedidoId]);
       }
       
       $pdo->prepare("DELETE FROM carrito WHERE usuario_id=?")->execute([$_SESSION['usuario_id']]);

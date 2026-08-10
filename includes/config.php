@@ -25,6 +25,8 @@ if (in_array(preg_replace('/:\\d+$/', '', strtolower($host)), $localHosts, true)
 
 define('SITE_NAME', 'IP Tecnología Perú');
 define('COSTO_DELIVERY', 15.00);
+// Habilitar debug en desarrollo (mostrar detalles de excepciones en UI)
+define('APP_DEBUG', true);
 
 // ============================================================
 // API PERU (apiperu.dev) — consulta DNI/RUC para autocompletar registro
