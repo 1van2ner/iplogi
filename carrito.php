@@ -3,7 +3,7 @@ require_once 'includes/config.php';
 $pdo = getDB();
 
 if (isLoggedIn()) {
-    $s = $pdo->prepare("SELECT c.*, p.nombre, p.precio, p.precio_oferta, p.stock, p.marca, p.imagen, cat.icono
+    $s = $pdo->prepare("SELECT c.*, p.nombre, p.precio, p.precio_oferta, p.stock, p.marca, p.imagen, p.canje_puntos, cat.icono
                         FROM carrito c
                         JOIN productos p ON c.producto_id = p.id
                         JOIN categorias cat ON p.categoria_id = cat.id
@@ -11,7 +11,7 @@ if (isLoggedIn()) {
                         ORDER BY c.creado_en DESC");
     $s->execute([$_SESSION['usuario_id']]);
 } else {
-    $s = $pdo->prepare("SELECT c.*, p.nombre, p.precio, p.precio_oferta, p.stock, p.marca, p.imagen, cat.icono
+    $s = $pdo->prepare("SELECT c.*, p.nombre, p.precio, p.precio_oferta, p.stock, p.marca, p.imagen, p.canje_puntos, cat.icono
                         FROM carrito c
                         JOIN productos p ON c.producto_id = p.id
                         JOIN categorias cat ON p.categoria_id = cat.id
@@ -241,7 +241,7 @@ include 'includes/header.php';
             </div>
             <div class="c-marca"><?= sanitize($item['marca']) ?></div>
             <?php if (!empty($item['es_canje_puntos'])): ?>
-              <div style="font-size:12px;color:#6b7300;font-weight:700;">Canjeado con <?= number_format($item['puntos_canjeados'] ?? 0) ?> pts</div>
+              <div style="font-size:12px;color:#6b7300;font-weight:700;">Canjeado con <?= number_format((int)($item['canje_puntos'] ?? 0) * (int)$item['cantidad']) ?> pts</div>
             <?php elseif (!empty($item['precio_oferta']) && $item['precio_oferta'] > 0): ?>
               <div class="c-tachado"><?= formatPrice($precioTachado) ?></div>
             <?php endif; ?>

@@ -5,6 +5,16 @@ header('Content-Type: application/json');
 $pdo    = getDB();
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+// ── Ensure carrito table has es_canje_puntos column ──
+try {
+    $col = $pdo->query("SHOW COLUMNS FROM carrito LIKE 'es_canje_puntos'")->fetch(PDO::FETCH_ASSOC);
+    if (!$col) {
+        $pdo->exec('ALTER TABLE carrito ADD COLUMN es_canje_puntos TINYINT DEFAULT 0');
+    }
+} catch (Exception $e) {
+    // Tabla no existe o error, continuar de todas formas
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 function getWhere() {
     if (isLoggedIn()) {
@@ -26,13 +36,14 @@ switch ($action) {
     case 'agregar':
         $productoId = (int)($_POST['producto_id'] ?? 0);
         $cantidad   = max(1, (int)($_POST['cantidad'] ?? 1));
+        $usarPuntos = !empty($_POST['usar_puntos']) ? 1 : 0;
 
         if (!$productoId) {
             echo json_encode(['success' => false, 'message' => 'Producto inválido']);
             exit;
         }
 
-        $p = $pdo->prepare("SELECT id, nombre, stock FROM productos WHERE id = ? AND activo = 1");
+        $p = $pdo->prepare("SELECT id, nombre, stock, canje_puntos FROM productos WHERE id = ? AND activo = 1");
         $p->execute([$productoId]);
         $producto = $p->fetch();
 
@@ -45,10 +56,31 @@ switch ($action) {
             exit;
         }
 
+        // Validar puntos si es canje
+        if ($usarPuntos) {
+            if (!isLoggedIn()) {
+                echo json_encode(['success' => false, 'message' => 'Debes iniciar sesión para canjear por puntos']);
+                exit;
+            }
+            if (empty($producto['canje_puntos'])) {
+                echo json_encode(['success' => false, 'message' => 'Este producto no se puede canjear por puntos']);
+                exit;
+            }
+            $userStmt = $pdo->prepare("SELECT puntos FROM usuarios WHERE id = ?");
+            $userStmt->execute([$_SESSION['usuario_id']]);
+            $userRow = $userStmt->fetch();
+            $userPoints = (int)($userRow['puntos'] ?? 0);
+            $puntosNecesarios = (int)($producto['canje_puntos'] * $cantidad);
+            if ($userPoints < $puntosNecesarios) {
+                echo json_encode(['success' => false, 'message' => 'No tienes suficientes puntos. Necesitas ' . $puntosNecesarios . ' puntos.']);
+                exit;
+            }
+        }
+
         $w = getWhere();
 
-        $check = $pdo->prepare("SELECT id, cantidad FROM carrito WHERE producto_id = ? AND {$w['campo']} = ?");
-        $check->execute([$productoId, $w['valor']]);
+        $check = $pdo->prepare("SELECT id, cantidad, es_canje_puntos FROM carrito WHERE producto_id = ? AND {$w['campo']} = ? AND es_canje_puntos = ?");
+        $check->execute([$productoId, $w['valor'], $usarPuntos]);
         $existing = $check->fetch();
 
         try {
@@ -57,11 +89,11 @@ switch ($action) {
                 $pdo->prepare("UPDATE carrito SET cantidad = ? WHERE id = ?")->execute([$nueva, $existing['id']]);
             } else {
                 if (isLoggedIn()) {
-                    $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad) VALUES (?, NULL, ?, ?)")
-                        ->execute([$_SESSION['usuario_id'], $productoId, $cantidad]);
+                    $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad, es_canje_puntos) VALUES (?, NULL, ?, ?, ?)")
+                        ->execute([$_SESSION['usuario_id'], $productoId, $cantidad, $usarPuntos]);
                 } else {
-                    $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad) VALUES (NULL, ?, ?, ?)")
-                        ->execute([session_id(), $productoId, $cantidad]);
+                    $pdo->prepare("INSERT INTO carrito (usuario_id, session_id, producto_id, cantidad, es_canje_puntos) VALUES (NULL, ?, ?, ?, ?)")
+                        ->execute([session_id(), $productoId, $cantidad, $usarPuntos]);
                 }
             }
         } catch (Exception $e) {
