@@ -20,88 +20,124 @@ try {
     // Si falla, se queda vacío
 }
 
-include $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/header.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/header.php';
+
+// Asegurar que el usuario esté logueado y obtener datos de perfil para la barra lateral
+if (!isLoggedIn()) { header('Location: ' . SITE_URL . '/login.php'); exit; }
+$pdo = getDB();
+$s = $pdo->prepare("SELECT * FROM usuarios WHERE id=?"); $s->execute([$_SESSION['usuario_id']]);
+$user = $s->fetch();
+$s = $pdo->prepare("SELECT COUNT(*) FROM pedidos WHERE usuario_id=?"); $s->execute([$_SESSION['usuario_id']]);
+$totalPedidos = (int)$s->fetchColumn();
+
 ?>
 
-<div style="max-width: 1200px; margin: 40px auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 0 20px;">
-    
-    <!-- TÍTULO LLAMATIVO -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: linear-gradient(135deg, #bae90e, #bae90e); padding: 25px 30px; border-radius: 14px; color: #000000; box-shadow: 0 10px 25px rgb(255, 255, 255);">
-        <div>
-            <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: #2b2a2a;"><i class="fas fa-shipping-fast"></i> Panel de Control y Seguimiento</h1>
-            <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 600; color: #000000;">Visualización de pedidos y rastreo de estado en tiempo real</p>
-        </div>
-        <div style="background: rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; color: #000000;">
-            Total Registros: <?= count($pedidos) ?>
-        </div>
+<div class="container">
+  <div class="profile-layout">
+
+    <!-- SIDEBAR (misma que en perfil.php) -->
+    <div class="profile-sidebar">
+      <div class="profile-avatar"><i class="fas fa-user" style="font-size:32px;"></i></div>
+      <div class="profile-name"><?= sanitize($user['nombre'].' '.($user['apellido']??'')) ?></div>
+      <div style="text-align:center;margin-bottom:6px;">
+        <span style="background:var(--bg3);color:var(--gris3);font-size:10px;font-weight:800;padding:3px 10px;border-radius:12px;text-transform:uppercase;">
+          Cliente
+        </span>
+      </div>
+      <div class="profile-email"><?= sanitize($user['email']) ?></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0;padding:14px;background:var(--bg3);border-radius:var(--r);">
+        <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:var(--amarillo);"><?php echo $totalPedidos ?></div><div style="font-size:10px;color:var(--gris3);">Pedidos</div></div>
+        <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:var(--amarillo);"><?= number_format((int)($user['puntos'] ?? 0)) ?></div><div style="font-size:10px;color:var(--gris3);">Puntos acumulados</div></div>
+      </div>
+
+      <nav class="profile-nav">
+        <a href="perfil.php?tab=datos"><i class="fas fa-user-edit"></i> Mis datos</a>
+        <a href="perfil.php?tab=seguridad"><i class="fas fa-lock"></i> Contraseña</a>
+        <a href="mis-pedidos.php" class="active"><i class="fas fa-history"></i> Mis Pedidos</a>
+        <a href="mis-cupones.php"><i class="fas fa-gift"></i> Mis Cupones</a>
+        <?php if(isAdmin()): ?>
+        <div style="height:1px;background:var(--borde);margin:10px 0;"></div>
+        <a href="admin/index.php" style="color:var(--amarillo);font-weight:800;"><i class="fas fa-tachometer-alt"></i> Panel Admin</a>
+        <?php endif; ?>
+        <div style="height:1px;background:var(--borde);margin:10px 0;"></div>
+        <a href="logout.php" style="color:var(--rojo);"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+      </nav>
     </div>
 
-    <!-- TABLA LIMPIA (SOLO LECTURA) -->
-    <div style="background: white; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #e2e8f0;">
-        <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap;">
-                <thead>
-                    <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #000000; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">
-                        <th style="padding: 16px 20px; color: #000000;">Cliente</th>
-                        <th style="padding: 16px 20px; color: #000000;">Estado Actual</th>
-                        <th style="padding: 16px 20px; color: #000000;">Total</th>
-                        <th style="padding: 16px 20px; text-align: center; color: #000000;">Acción / Seguimiento</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($pedidos)): ?>
-                        <tr>
-                            <td colspan="4" style="padding: 30px; text-align: center; color: #64748b; font-weight: 600;">
-                                No hay pedidos registrados en este momento.
-                            </td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($pedidos as $index => $p): 
-                            $bgRow = ($index % 2 == 0) ? '#ffffff' : '#fcfcfc';
-                            
-                            $badgeBg = '#f1f5f9';
-                            $badgeColor = '#000000';
-                            if ($p['estado'] == 'pendiente') { $badgeBg = '#fef3c7'; $badgeColor = '#000000'; }
-                            elseif ($p['estado'] == 'procesando') { $badgeBg = '#e0f2fe'; $badgeColor = '#000000'; }
-                            elseif ($p['estado'] == 'enviado') { $badgeBg = '#ede9fe'; $badgeColor = '#000000'; }
-                            elseif ($p['estado'] == 'entregado') { $badgeBg = '#d1fae5'; $badgeColor = '#000000'; }
-                        ?>
-                        <tr style="border-bottom: 1px solid #f1f5f9; background: <?= $bgRow ?>;">
-                            
-                            <!-- CLIENTE -->
-                            <td style="padding: 16px 20px; color: #000000; font-weight: 700;">
-                                <?= htmlspecialchars(($p['nombre'] ?? '') . ' ' . ($p['apellido'] ?? '')) ?>
-                            </td>
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="profile-content">
 
-                            <!-- ESTADO -->
-                            <td style="padding: 16px 20px;">
-                                <span style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 12px; background: <?= $badgeBg ?>; color: <?= $badgeColor ?>; text-transform: capitalize;">
-                                    <?= htmlspecialchars($p['estado']) ?>
-                                </span>
-                            </td>
+      <!-- TÍTULO LLAMATIVO -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; background: linear-gradient(135deg, #bae90e, #bae90e); padding: 18px 22px; border-radius: 12px; color: #000000;">
+          <div>
+              <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #2b2a2a;"><i class="fas fa-shipping-fast"></i> Panel de Control y Seguimiento</h1>
+              <p style="margin: 4px 0 0 0; font-size: 13px; font-weight: 600; color: #000000;">Visualización de pedidos y rastreo de estado en tiempo real</p>
+          </div>
+          <div style="background: rgba(255,255,255,0.4); padding: 6px 12px; border-radius: 16px; font-weight: 700; font-size: 13px; color: #000000;">
+              Total Registros: <?= count($pedidos) ?>
+          </div>
+      </div>
 
-                            <!-- TOTAL -->
-                            <td style="padding: 16px 20px; font-weight: 800; color: #000000; font-size: 15px;">
-                                $<?= number_format($p['total'], 2) ?>
-                            </td>
+      <!-- TABLA LIMPIA (SOLO LECTURA) -->
+      <div style="background: white; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.04); overflow: hidden; border: 1px solid #e2e8f0;">
+          <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap;">
+                  <thead>
+                      <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #000000; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">
+                          <th style="padding: 14px 18px; color: #000000;">Cliente</th>
+                          <th style="padding: 14px 18px; color: #000000;">Estado Actual</th>
+                          <th style="padding: 14px 18px; color: #000000;">Total</th>
+                          <th style="padding: 14px 18px; text-align: center; color: #000000;">Acción / Seguimiento</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      <?php if (empty($pedidos)): ?>
+                          <tr>
+                              <td colspan="4" style="padding: 30px; text-align: center; color: #64748b; font-weight: 600;">
+                                  No hay pedidos registrados en este momento.
+                              </td>
+                          </tr>
+                      <?php else: ?>
+                          <?php foreach ($pedidos as $index => $p): 
+                              $bgRow = ($index % 2 == 0) ? '#ffffff' : '#fcfcfc';
+                              
+                              $badgeBg = '#f1f5f9';
+                              $badgeColor = '#000000';
+                              if ($p['estado'] == 'pendiente') { $badgeBg = '#fef3c7'; $badgeColor = '#000000'; }
+                              elseif ($p['estado'] == 'procesando') { $badgeBg = '#e0f2fe'; $badgeColor = '#000000'; }
+                              elseif ($p['estado'] == 'enviado') { $badgeBg = '#ede9fe'; $badgeColor = '#000000'; }
+                              elseif ($p['estado'] == 'entregado') { $badgeBg = '#d1fae5'; $badgeColor = '#000000'; }
+                          ?>
+                          <tr style="border-bottom: 1px solid #f1f5f9; background: <?= $bgRow ?>;">
+                              <td style="padding: 14px 18px; color: #000000; font-weight: 700;">
+                                  <?= htmlspecialchars(($p['nombre'] ?? '') . ' ' . ($p['apellido'] ?? '')) ?>
+                              </td>
+                              <td style="padding: 14px 18px;">
+                                  <span style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 12px; background: <?= $badgeBg ?>; color: <?= $badgeColor ?>; text-transform: capitalize;">
+                                      <?= htmlspecialchars($p['estado']) ?>
+                                  </span>
+                              </td>
+                              <td style="padding: 14px 18px; font-weight: 800; color: #000000; font-size: 15px;">
+                                  $<?= number_format($p['total'], 2) ?>
+                              </td>
+                              <td style="padding: 14px 18px; text-align: center;">
+                                  <button type="button" onclick="verSeguimiento('<?= htmlspecialchars((string)$p['id']) ?>', '<?= htmlspecialchars($p['estado']) ?>')" style="background: linear-gradient(135deg, #c8ff00, #c8ff00); color: #000000; border: none; padding: 9px 18px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 10px rgba(0,0,0,0.12);">
+                                      <i class="fas fa-route" style="color: #000000;"></i> Seguir
+                                  </button>
+                              </td>
+                          </tr>
+                          <?php endforeach; ?>
+                      <?php endif; ?>
+                  </tbody>
+              </table>
+          </div>
+      </div>
 
-                            <!-- BOTÓN SEGUIR -->
-                            <td style="padding: 16px 20px; text-align: center;">
-                                <button type="button" 
-                                        onclick="verSeguimiento('<?= htmlspecialchars((string)$p['id']) ?>', '<?= htmlspecialchars($p['estado']) ?>')" 
-                                        style="background: linear-gradient(135deg, #c8ff00, #c8ff00); color: #000000; border: none; padding: 9px 20px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
-                                    <i class="fas fa-route" style="color: #000000;"></i> Seguir
-                                </button>
-                            </td>
+    </div><!-- /profile-content -->
 
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+  </div><!-- /profile-layout -->
+</div><!-- /container -->
 
 <!-- MODAL DE SEGUIMIENTO CON LETRAS NEGRAS -->
 <div id="modalSeguimiento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; align-items:center; justify-content:center;">

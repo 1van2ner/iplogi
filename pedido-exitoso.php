@@ -26,6 +26,15 @@ include 'includes/header.php';
     <div class="order-detail-box">
       <div class="order-detail-row"><span>Estado</span><span style="color:var(--warning);">Pendiente de confirmación</span></div>
       <div class="order-detail-row"><span>Tipo de entrega</span><span><?= ($pedido['tipo_entrega'] ?? '') === 'delivery' ? 'Delivery a domicilio' : (($pedido['tipo_entrega'] ?? '') === 'provincia' ? 'Provincia' : 'Recojo en tienda') ?></span></div>
+      <?php if (!empty($pedido['distrito_entrega']) || !empty($pedido['direccion_entrega'])): ?>
+      <div class="order-detail-row"><span>Dirección</span><span><?= sanitize(trim(($pedido['distrito_entrega'] ?? '') . ' ' . ($pedido['direccion_entrega'] ?? ''))) ?></span></div>
+      <?php endif; ?>
+      <?php if (!empty($pedido['referencia'])): ?>
+      <div class="order-detail-row"><span>Referencia</span><span><?= sanitize($pedido['referencia']) ?></span></div>
+      <?php endif; ?>
+      <?php if (!empty($pedido['notas'])): ?>
+      <div class="order-detail-row"><span>Notas</span><span><?= sanitize($pedido['notas']) ?></span></div>
+      <?php endif; ?>
       <div class="order-detail-row"><span>Método de pago</span><span><?= ucfirst($pedido['metodo_pago'] ?? 'N/A') ?></span></div>
       <div class="order-detail-row"><span>Productos (<?= count($detalles) ?>)</span>
         <span><?php foreach($detalles as $d): ?><?= sanitize($d['nombre']) ?><?= !$d===end($detalles)?', ':'' ?><?php endforeach; ?></span>

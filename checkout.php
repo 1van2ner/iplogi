@@ -112,6 +112,12 @@ function validarCupon($pdo, $codigo, $subtotal, $usuarioId = null) {
         return [null, 0.0, 'Código de cupón no válido o inactivo.', null];
       }
     }
+    // Si es un cupón público con límite de usos, verificar que queden usos disponibles
+    if (!$usuarioCuponId && $cupon && isset($cupon['limite_usos']) && $cupon['limite_usos'] !== null) {
+      if ((int)$cupon['limite_usos'] <= 0) {
+        return [null, 0.0, 'Este cupón ya no tiene usos disponibles.', null];
+      }
+    }
     
     // 3. Validar fechas y condiciones del cupón
     $now = new DateTimeImmutable('now');
@@ -160,6 +166,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   $notas         = sanitize($_POST['notas']??'');
   $aplicarCupon  = isset($_POST['aplicar_cupon']);
 
+  // Normalizar: si es delivery y no hay dirección pero sí distrito, usar distrito+referencia como fallback
+  if ($tipoEnvio === 'delivery' && empty($direccion) && !empty($distrito)) {
+    $fallback = $distrito;
+    if (!empty($referencia)) $fallback .= ' - ' . $referencia;
+    $direccion = $fallback;
+  }
+
   if ($codigoCupon !== '') {
       [$cuponAplicado, $descuentoCupon, $errorCupon, $usuarioCuponIdAplicado] = validarCupon($pdo, $codigoCupon, $subtotal, $_SESSION['usuario_id']);
       if ($errorCupon) {
@@ -171,7 +184,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     if (!$tipoEnvio)  $errores[]='Selecciona el tipo de entrega.';
     if (!$metodoPago) $errores[]='Selecciona el método de pago.';
     if ($tipoEnvio==='delivery' && !$distrito)  $errores[]='Selecciona tu distrito.';
-    if ($tipoEnvio==='delivery' && !$direccion) $errores[]='Ingresa tu dirección.';
+    if (in_array($tipoEnvio, ['delivery','provincia'], true) && !$direccion) {
+      $errores[]='Ingresa tu dirección.';
+      // Debug: guardar POST para investigar por qué llega vacía la dirección
+      try {
+        $logDir = __DIR__ . '/tmp_logs';
+        if (!is_dir($logDir)) @mkdir($logDir, 0775, true);
+        $fn = $logDir . '/checkout_post_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.log';
+        file_put_contents($fn, "POST DATA:\n" . print_r($_POST, true));
+      } catch (Throwable $e) {
+        error_log('checkout debug write failed: ' . $e->getMessage());
+      }
+    }
     if ($tipoEnvio==='provincia' && !$provDest) $errores[]='Indica tu ciudad/provincia.';
   }
 
@@ -190,24 +214,42 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     try {
       $pdo->beginTransaction();
 
-      // Adaptar INSERT según esquema real de la tabla `pedidos`.
+      // Detectar columnas disponibles en `pedidos` y preparar INSERT dinámico
       $colsInfo = $pdo->query("SHOW COLUMNS FROM pedidos")->fetchAll(PDO::FETCH_ASSOC);
-      $hasEstado = false;
+      $hasEstado = false; $hasDireccion = false; $hasDistrito = false; $hasReferencia = false; $hasNotas = false;
       foreach ($colsInfo as $col) {
-        if (($col['Field'] ?? '') === 'estado') { $hasEstado = true; break; }
+        $f = $col['Field'] ?? '';
+        if ($f === 'estado') $hasEstado = true;
+        if ($f === 'direccion_entrega') $hasDireccion = true;
+        if ($f === 'distrito_entrega') $hasDistrito = true;
+        if ($f === 'referencia') $hasReferencia = true;
+        if ($f === 'notas') $hasNotas = true;
       }
 
-      if ($hasEstado) {
-        $stmtPedido = $pdo->prepare("INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, tipo_entrega, creado_en) VALUES (?, ?, 'pendiente', ?, ?, NOW())");
-        $stmtPedido->execute([$_SESSION['usuario_id'], $total, $metodoPago, $tipoEnvio]);
-      } else {
-        // INSERT sin columna 'estado'
-        $stmtPedido = $pdo->prepare("INSERT INTO pedidos (usuario_id, total, metodo_pago, tipo_entrega, creado_en) VALUES (?, ?, ?, ?, NOW())");
-        $stmtPedido->execute([$_SESSION['usuario_id'], $total, $metodoPago, $tipoEnvio]);
-      }
+      $columns = [];
+      $placeholders = [];
+      $params = [];
+
+      // columnas base
+      $columns[] = 'usuario_id'; $placeholders[] = '?'; $params[] = $_SESSION['usuario_id'];
+      $columns[] = 'total'; $placeholders[] = '?'; $params[] = $total;
+      if ($hasEstado) { $columns[] = 'estado'; $placeholders[] = '?'; $params[] = 'pendiente'; }
+      $columns[] = 'metodo_pago'; $placeholders[] = '?'; $params[] = $metodoPago;
+      $columns[] = 'tipo_entrega'; $placeholders[] = '?'; $params[] = $tipoEnvio;
+
+      if ($hasDireccion) { $columns[] = 'direccion_entrega'; $placeholders[] = '?'; $params[] = $direccion; }
+      if ($hasDistrito)  { $columns[] = 'distrito_entrega';  $placeholders[] = '?'; $params[] = ($tipoEnvio==='provincia' ? $provDest : $distrito); }
+      if ($hasReferencia){ $columns[] = 'referencia'; $placeholders[] = '?'; $params[] = $referencia; }
+      if ($hasNotas)     { $columns[] = 'notas'; $placeholders[] = '?'; $params[] = $notas; }
+
+      $columns[] = 'creado_en'; $placeholders[] = 'NOW()';
+
+      $sql = sprintf("INSERT INTO pedidos (%s) VALUES (%s)", implode(', ', $columns), implode(', ', $placeholders));
+      $stmtPedido = $pdo->prepare($sql);
+      $stmtPedido->execute($params);
 
       $pedidoId = $pdo->lastInsertId();
-      
+
       // Comprobar si `detalle_pedidos` tiene columna `estado`
       $colsDetalle = $pdo->query("SHOW COLUMNS FROM detalle_pedidos")->fetchAll(PDO::FETCH_ASSOC);
       $detalleHasEstado = false;
@@ -249,6 +291,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       // Marcar cupón personal como usado si fue aplicado
       if ($usuarioCuponIdAplicado) {
         $pdo->prepare("UPDATE usuario_cupones SET usado = 1 WHERE id = ?")->execute([$usuarioCuponIdAplicado]);
+      }
+      // Si se aplicó un cupón público (no personal) con límite de usos, decrementar contador
+      if (!$usuarioCuponIdAplicado && !empty($cuponAplicado) && isset($cuponAplicado['id']) && isset($cuponAplicado['limite_usos']) && $cuponAplicado['limite_usos'] !== null) {
+        $upd = $pdo->prepare("UPDATE cupones SET limite_usos = limite_usos - 1 WHERE id = ? AND (limite_usos IS NULL OR limite_usos > 0)");
+        $upd->execute([$cuponAplicado['id']]);
+        if ($upd->rowCount() !== 1) {
+          throw new Exception('El cupón se agotó mientras procesábamos tu pedido. Intenta con otro cupón.');
+        }
       }
       
       $pdo->commit();
