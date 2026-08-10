@@ -1,91 +1,254 @@
 <?php
-require_once 'includes/config.php';
-if (!isLoggedIn()) { header('Location: ' . SITE_URL . '/login.php?redirect=' . urlencode($_SERVER['REQUEST_URI'])); exit; }
-$pdo = getDB();
+require_once $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/config.php';
 
-$s = $pdo->prepare("SELECT p.*, (SELECT COUNT(*) FROM detalle_pedidos WHERE pedido_id=p.id) as items
-                    FROM pedidos p WHERE p.usuario_id=? ORDER BY p.creado_en DESC");
-$s->execute([$_SESSION['usuario_id']]);
-$pedidos = $s->fetchAll();
+try {
+    $pdo = getDB();
+} catch (Exception $e) {
+    die("Error de conexión: " . $e->getMessage());
+}
 
-$pageTitle = 'Mis Pedidos';
-include 'includes/header.php';
+$pedidos = [];
+try {
+    $stmt = $pdo->query("SELECT p.*, u.nombre, u.apellido FROM pedidos p JOIN usuarios u ON p.usuario_id = u.id ORDER BY p.creado_en DESC LIMIT 15");
+    $pedidos = $stmt->fetchAll();
+} catch (Exception $e) {
+    // Si falla, se queda vacío
+}
+
+include $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/header.php';
 ?>
-<div class="container orders-layout">
-  <div class="breadcrumb"><a href="<?= SITE_URL ?>/index.php">Inicio</a><span>›</span><strong>Mis Pedidos</strong></div>
 
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
-    <h1 class="page-title" style="margin-bottom:0;"><i class="fas fa-box"></i> Mis Pedidos</h1>
-    <a href="<?= SITE_URL ?>/productos.php" class="btn-main" style="font-size:13px;padding:10px 20px;"><i class="fas fa-plus"></i> Nuevo pedido</a>
-  </div>
-
-  <?php if(empty($pedidos)): ?>
-    <div class="no-results" style="background:var(--dark2);border-radius:var(--radius-lg);border:1.5px dashed var(--border);">
-      <i class="fas fa-box-open"></i>
-      <p style="font-size:18px;font-weight:700;color:var(--white);margin-bottom:8px;">No tienes pedidos aún</p>
-      <p>Explora nuestro catálogo y realiza tu primera compra</p>
-      <a href="<?= SITE_URL ?>/productos.php" class="btn-main" style="margin-top:20px;display:inline-flex;"><i class="fas fa-shopping-bag"></i> Ir al catálogo</a>
+<div style="max-width: 1200px; margin: 40px auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 0 20px;">
+    
+    <!-- TÍTULO LLAMATIVO -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: linear-gradient(135deg, #bae90e, #bae90e); padding: 25px 30px; border-radius: 14px; color: #000000; box-shadow: 0 10px 25px rgb(255, 255, 255);">
+        <div>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: #2b2a2a;"><i class="fas fa-shipping-fast"></i> Panel de Control y Seguimiento</h1>
+            <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 600; color: #000000;">Visualización de pedidos y rastreo de estado en tiempo real</p>
+        </div>
+        <div style="background: rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; color: #000000;">
+            Total Registros: <?= count($pedidos) ?>
+        </div>
     </div>
-  <?php else: ?>
-    <?php foreach($pedidos as $pedido): ?>
-      <?php
-        $ds = $pdo->prepare("SELECT dp.*, p.nombre, p.marca, p.imagen, c.icono FROM detalle_pedidos dp JOIN productos p ON dp.producto_id=p.id JOIN categorias c ON p.categoria_id=c.id WHERE dp.pedido_id=?");
-        $ds->execute([$pedido['id']]);
-        $detalles = $ds->fetchAll();
-        $badgeClass = 'badge-' . strtolower($pedido['estado']);
-      ?>
-      <div class="order-card">
-        <div class="order-card-header">
-          <div>
-            <div class="order-code">#<?= str_pad($pedido['id'],6,'0',STR_PAD_LEFT) ?></div>
-            <div class="order-date"><i class="fas fa-calendar-alt"></i> <?= date('d/m/Y H:i', strtotime($pedido['creado_en'])) ?></div>
-          </div>
-          <span class="order-badge <?= $badgeClass ?>">
-            <?= ucfirst($pedido['estado']) ?>
-          </span>
+
+    <!-- TABLA LIMPIA (SOLO LECTURA) -->
+    <div style="background: white; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #e2e8f0;">
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap;">
+                <thead>
+                    <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #000000; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">
+                        <th style="padding: 16px 20px; color: #000000;">Cliente</th>
+                        <th style="padding: 16px 20px; color: #000000;">Estado Actual</th>
+                        <th style="padding: 16px 20px; color: #000000;">Total</th>
+                        <th style="padding: 16px 20px; text-align: center; color: #000000;">Acción / Seguimiento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($pedidos)): ?>
+                        <tr>
+                            <td colspan="4" style="padding: 30px; text-align: center; color: #64748b; font-weight: 600;">
+                                No hay pedidos registrados en este momento.
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($pedidos as $index => $p): 
+                            $bgRow = ($index % 2 == 0) ? '#ffffff' : '#fcfcfc';
+                            
+                            $badgeBg = '#f1f5f9';
+                            $badgeColor = '#000000';
+                            if ($p['estado'] == 'pendiente') { $badgeBg = '#fef3c7'; $badgeColor = '#000000'; }
+                            elseif ($p['estado'] == 'procesando') { $badgeBg = '#e0f2fe'; $badgeColor = '#000000'; }
+                            elseif ($p['estado'] == 'enviado') { $badgeBg = '#ede9fe'; $badgeColor = '#000000'; }
+                            elseif ($p['estado'] == 'entregado') { $badgeBg = '#d1fae5'; $badgeColor = '#000000'; }
+                        ?>
+                        <tr style="border-bottom: 1px solid #f1f5f9; background: <?= $bgRow ?>;">
+                            
+                            <!-- CLIENTE -->
+                            <td style="padding: 16px 20px; color: #000000; font-weight: 700;">
+                                <?= htmlspecialchars(($p['nombre'] ?? '') . ' ' . ($p['apellido'] ?? '')) ?>
+                            </td>
+
+                            <!-- ESTADO -->
+                            <td style="padding: 16px 20px;">
+                                <span style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 12px; background: <?= $badgeBg ?>; color: <?= $badgeColor ?>; text-transform: capitalize;">
+                                    <?= htmlspecialchars($p['estado']) ?>
+                                </span>
+                            </td>
+
+                            <!-- TOTAL -->
+                            <td style="padding: 16px 20px; font-weight: 800; color: #000000; font-size: 15px;">
+                                $<?= number_format($p['total'], 2) ?>
+                            </td>
+
+                            <!-- BOTÓN SEGUIR -->
+                            <td style="padding: 16px 20px; text-align: center;">
+                                <button type="button" 
+                                        onclick="verSeguimiento('<?= htmlspecialchars($p['codigo']) ?>', '<?= htmlspecialchars($p['estado']) ?>')" 
+                                        style="background: linear-gradient(135deg, #c8ff00, #c8ff00); color: #000000; border: none; padding: 9px 20px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                                    <i class="fas fa-route" style="color: #000000;"></i> Seguir
+                                </button>
+                            </td>
+
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
-        <div class="order-card-body">
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
-            <?php foreach($detalles as $det): ?>
-              <span class="order-item-chip">
-                <?php if (!empty($det['imagen'])): ?>
-                  <img src="<?= SITE_URL ?>/<?= sanitize($det['imagen']) ?>" alt="<?= sanitize($det['nombre']) ?>" style="width:40px;height:40px;object-fit:contain;border-radius:6px;">
-                <?php else: ?>
-                  <i class="fas <?= sanitize($det['icono']) ?>"></i>
-                <?php endif; ?>
-                <?= sanitize($det['nombre']) ?> x<?= $det['cantidad'] ?>
-              </span>
-            <?php endforeach; ?>
-          </div>
-          <div style="display:flex;gap:20px;font-size:12px;color:var(--gray);flex-wrap:wrap;">
-            <span><i class="fas fa-truck" style="color:var(--primary);"></i>
-              <?= $pedido['tipo_envio'] === 'delivery' ? 'Delivery' : 'Recojo en tienda' ?>
-            </span>
-            <span><i class="fas fa-credit-card" style="color:var(--primary);"></i>
-              <?= ucfirst($pedido['metodo_pago'] ?? 'N/A') ?>
-            </span>
-            <?php if($pedido['direccion_entrega']): ?>
-              <span><i class="fas fa-map-marker-alt" style="color:var(--primary);"></i>
-                <?= sanitize(substr($pedido['direccion_entrega'],0,50)) ?>...
-              </span>
-            <?php endif; ?>
-          </div>
-        </div>
-        <div class="order-card-footer">
-          <div>
-            <div style="font-size:12px;color:var(--gray);margin-bottom:2px;"><?= count($detalles) ?> producto(s)</div>
-            <div class="order-total"><?= formatPrice($pedido['total']) ?></div>
-          </div>
-          <a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $pedido['id'] ?>"
-             style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;background:var(--primary-light);color:var(--primary);border:1px solid rgba(255,230,0,.3);border-radius:var(--radius);font-size:13px;font-weight:700;transition:all .2s;"
-             onmouseover="this.style.background='var(--primary)';this.style.color='var(--black)';"
-             onmouseout="this.style.background='var(--primary-light)';this.style.color='var(--primary)';">
-            <i class="fas fa-eye"></i> Ver detalle
-          </a>
-        </div>
-      </div>
-    <?php endforeach; ?>
-  <?php endif; ?>
+    </div>
 </div>
-<div style="padding-bottom:40px;"></div>
-<?php include 'includes/footer.php'; ?>
+
+<!-- MODAL DE SEGUIMIENTO CON LETRAS NEGRAS -->
+<div id="modalSeguimiento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:white; padding:35px 40px; border-radius:20px; width:92%; max-width:800px; position:relative; box-shadow: 0 25px 50px rgba(0,0,0,0.25);">
+        
+        <!-- CABECERA DEL MODAL -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; border-bottom:1px solid #f1f5f9; padding-bottom:18px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="background:#f0f9ff; color:#000000; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid #080808;">
+                    <i class="fas fa-shipping-fast" style="color: #000000;"></i>
+                </div>
+                <h3 id="modalTitulo" style="margin:0; font-size:22px; color:#000000; font-weight:900;">Seguimiento del Pedido</h3>
+            </div>
+            <button type="button" onclick="document.getElementById('modalSeguimiento').style.display='none'" style="background:#f8fafc; border:1px solid #e2e8f0; color:#000000; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; transition:all 0.2s;">
+                <i class="fas fa-times" style="color: #000000;"></i>
+            </button>
+        </div>
+        
+        <!-- CONTENEDOR UNIFICADO DE LA LÍNEA Y LOS 4 PASOS -->
+        <div style="padding: 0 28px; margin-bottom: 40px; margin-top: 10px;">
+            <div style="position:relative; width:100%;">
+                
+                <!-- 1. Barra de Progreso de fondo gris -->
+                <div style="position:absolute; top:28px; left:28px; right:28px; height:8px; background:#e2e8f0; border-radius:4px; z-index:1;">
+                    <!-- Barra verde de avance dinámico -->
+                    <div id="barraProgreso" style="position:absolute; top:0; left:0; width:0%; height:8px; background:linear-gradient(90deg, #10b981, #059669); border-radius:4px; transition: width 0.5s ease;"></div>
+                </div>
+
+                <!-- 2. Los 4 Nodos distribuidos en flex -->
+                <div style="display:flex; justify-content:space-between; align-items:center; position:relative; z-index:3;">
+                    
+                    <!-- PASO 1: Pendiente -->
+                    <div class="step-col" data-index="0" style="text-align:center; flex:0 0 auto;">
+                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
+                            <i class="fas fa-check" style="color: #000000;"></i>
+                        </div>
+                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Pendiente</div>
+                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
+                    </div>
+
+                    <!-- PASO 2: Procesando -->
+                    <div class="step-col" data-index="1" style="text-align:center; flex:0 0 auto;">
+                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
+                            <i class="fas fa-box" style="color: #000000;"></i>
+                        </div>
+                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Procesando</div>
+                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
+                    </div>
+
+                    <!-- PASO 3: Enviado -->
+                    <div class="step-col" data-index="2" style="text-align:center; flex:0 0 auto;">
+                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
+                            <i class="fas fa-check" style="color: #000000;"></i>
+                        </div>
+                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Enviado</div>
+                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
+                    </div>
+
+                    <!-- PASO 4: Entregado -->
+                    <div class="step-col" data-index="3" style="text-align:center; flex:0 0 auto;">
+                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
+                            <i class="fas fa-check" style="color: #000000;"></i>
+                        </div>
+                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Entregado</div>
+                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- CAJA DE ESTADO ACTUAL EN RUTA -->
+        <div style="background:#f0f9ff; border:1px solid #edfdba; border-radius:14px; padding:18px 25px; display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:30px;">
+            <div style="background:#c8ff00; color:#000000; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+                <i class="fas fa-paper-plane" style="color: #000000;"></i>
+            </div>
+            <div style="font-size:15px; color:#000000; font-weight:800;">
+                Estado Actual en Ruta: <span id="textoEstadoActual" style="color:#000000; font-weight:900;">Procesando</span>
+            </div>
+        </div>
+
+        <!-- PIE DE MODAL (BOTÓN CERRAR) -->
+        <div style="text-align: right;">
+            <button type="button" onclick="document.getElementById('modalSeguimiento').style.display='none'" style="padding:12px 28px; background:#e2e8f0; border:none; border-radius:10px; cursor:pointer; font-weight:800; color:#000000; font-size:14px; display:inline-flex; align-items:center; gap:8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <i class="fas fa-times-circle" style="color: #000000;"></i> Cerrar Ventana
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function verSeguimiento(codigo, estadoActual) {
+    const modal = document.getElementById('modalSeguimiento');
+    document.getElementById('modalTitulo').innerText = 'Seguimiento del Pedido: #' + codigo;
+    modal.style.display = 'flex';
+
+    let stepIndex = 0;
+    if (estadoActual === 'pendiente') stepIndex = 0;
+    else if (estadoActual === 'procesando') stepIndex = 1;
+    else if (estadoActual === 'enviado') stepIndex = 2;
+    else if (estadoActual === 'entregado') stepIndex = 3;
+
+    const porcentajes = [0, 33.33, 66.66, 100];
+    document.getElementById('barraProgreso').style.width = porcentajes[stepIndex] + '%';
+
+    const cols = document.querySelectorAll('.step-col');
+    const nombresPasos = ['Pendiente', 'Procesando', 'Enviado', 'Entregado'];
+
+    cols.forEach((col, idx) => {
+        const iconWrap = col.querySelector('.step-icon-wrap');
+        const badge = col.querySelector('.step-badge');
+        
+        let iconHtml = '<i class="fas fa-check" style="color: #000000;"></i>';
+        if (idx === 1) iconHtml = '<i class="fas fa-box" style="color: #000000;"></i>';
+
+        if (idx < stepIndex) {
+            iconWrap.style.background = '#ffffff';
+            iconWrap.style.borderColor = '#10b981';
+            iconWrap.style.color = '#000000';
+            iconWrap.style.boxShadow = '0 4px 12px rgba(16,185,129,0.2)';
+            iconWrap.innerHTML = '<i class="fas fa-check" style="color: #000000;"></i>';
+            
+            badge.style.background = '#d1fae5';
+            badge.style.color = '#000000';
+            badge.innerText = 'Completado';
+        } else if (idx === stepIndex) {
+            iconWrap.style.background = '#fffffd';
+            iconWrap.style.borderColor = '#ffffff';
+            iconWrap.style.color = '#000000';
+            iconWrap.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+            iconWrap.innerHTML = iconHtml;
+            
+            badge.style.background = '#f2ffb0';
+            badge.style.color = '#000000';
+            badge.innerText = 'En curso';
+        } else {
+            iconWrap.style.background = '#ffffff';
+            iconWrap.style.borderColor = '#cbd5e1';
+            iconWrap.style.color = '#000000';
+            iconWrap.style.boxShadow = 'none';
+            iconWrap.innerHTML = iconHtml;
+            
+            badge.style.background = '#f1f5f9';
+            badge.style.color = '#2b2b2b';
+            badge.innerText = 'Pendiente';
+        }
+    });
+
+    document.getElementById('textoEstadoActual').innerText = nombresPasos[stepIndex];
+}
+</script>
+
+<?php include $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/footer.php'; ?>

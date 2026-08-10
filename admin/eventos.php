@@ -117,9 +117,6 @@ include '../includes/header.php';
         <h1 class="admin-main-title"><i class="fas fa-calendar-day" style="color:var(--amarillo-texto);margin-right:8px;"></i>Eventos</h1>
         <p style="color:var(--gris3);font-size:13px;margin-top:3px;">Panel para campañas y actividades especiales</p>
       </div>
-      <a href="Black_friday.php" style="padding:9px 18px;background:var(--amarillo);color:#000;border-radius:var(--r);font-size:13px;font-weight:800;text-decoration:none;display:flex;align-items:center;gap:6px;">
-        <i class="fas fa-plus"></i> Crear evento
-      </a>
     </div>
 
     <div class="dash-panel">

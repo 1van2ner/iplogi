@@ -25,14 +25,11 @@ include 'includes/header.php';
 
     <div class="order-detail-box">
       <div class="order-detail-row"><span>Estado</span><span style="color:var(--warning);">Pendiente de confirmación</span></div>
-      <div class="order-detail-row"><span>Tipo de entrega</span><span><?= $pedido['tipo_envio']==='delivery'?'Delivery a domicilio':'Recojo en tienda' ?></span></div>
+      <div class="order-detail-row"><span>Tipo de entrega</span><span><?= ($pedido['tipo_entrega'] ?? '') === 'delivery' ? 'Delivery a domicilio' : (($pedido['tipo_entrega'] ?? '') === 'provincia' ? 'Provincia' : 'Recojo en tienda') ?></span></div>
       <div class="order-detail-row"><span>Método de pago</span><span><?= ucfirst($pedido['metodo_pago'] ?? 'N/A') ?></span></div>
       <div class="order-detail-row"><span>Productos (<?= count($detalles) ?>)</span>
         <span><?php foreach($detalles as $d): ?><?= sanitize($d['nombre']) ?><?= !$d===end($detalles)?', ':'' ?><?php endforeach; ?></span>
       </div>
-      <?php if($pedido['envio'] > 0): ?>
-        <div class="order-detail-row"><span>Envío</span><span><?= formatPrice($pedido['envio']) ?></span></div>
-      <?php endif; ?>
       <div class="order-detail-row"><span>TOTAL</span><span><?= formatPrice($pedido['total']) ?></span></div>
     </div>
 

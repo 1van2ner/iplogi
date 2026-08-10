@@ -39,6 +39,17 @@ foreach ($items as $it) {
     $subtotal += $precioItem * $it['cantidad'];
 }
 
+// Validación frontal de stock para evitar que el checkout llegue a una transacción
+// y luego falle en UPDATE de productos sin mensaje útil al usuario.
+foreach ($items as $it) {
+  if (!empty($it['es_canje_puntos'])) {
+    continue;
+  }
+  if ((int)$it['cantidad'] > (int)($it['stock'] ?? 0)) {
+    $errores[] = 'No hay stock suficiente para ' . sanitize($it['nombre']) . '.';
+  }
+}
+
 function validarCupon($pdo, $codigo, $subtotal, $usuarioId = null) {
   $codigo = trim($codigo);
   if ($codigo === '') {
@@ -161,11 +172,19 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $dirFinal = ($tipoEnvio==='provincia') ? $provDest : $direccion;
     try {
       $pdo->beginTransaction();
-      $pdo->prepare("INSERT INTO pedidos (usuario_id,codigo,subtotal,envio,total,tipo_envio,metodo_pago,
-          direccion_entrega,distrito_entrega,referencia,notas,estado,creado_en)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,'pendiente',NOW())")
-        ->execute([$_SESSION['usuario_id'],$codigo,$subtotal,$envio,$total,
-          $tipoEnvio,$metodoPago,$dirFinal,$distrito,$referencia,$notas]);
+
+      // La tabla 'pedidos' viva en esta BD no tiene estas columnas antiguas:
+      // codigo, subtotal, envio, tipo_envio, direccion_entrega, distrito_entrega, referencia, notas.
+      // Por eso el INSERT original recibe un error SQL y cae al catch genérico.
+      $stmtPedido = $pdo->prepare("INSERT INTO pedidos (usuario_id, total, estado, metodo_pago, tipo_entrega, creado_en)
+          VALUES (?, ?, 'pendiente', ?, ?, NOW())");
+      $stmtPedido->execute([
+        $_SESSION['usuario_id'],
+        $total,
+        $metodoPago,
+        $tipoEnvio,
+      ]);
+
       $pedidoId = $pdo->lastInsertId();
       foreach ($items as $it) {
         if ($it['es_canje_puntos']) {
@@ -175,10 +194,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
           $pr = $it['precio_oferta'] ?? $it['precio'];
           $subtotalItem = $pr * $it['cantidad'];
         }
-        $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal)VALUES(?,?,?,?,?)")
-          ->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem]);
-        $pdo->prepare("UPDATE productos SET stock=stock-? WHERE id=? AND stock>=?")
-          ->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);
+        $stmtDetalle = $pdo->prepare("INSERT INTO detalle_pedidos(pedido_id,producto_id,cantidad,precio_unitario,subtotal)VALUES(?,?,?,?,?)");
+        $stmtDetalle->execute([$pedidoId,$it['producto_id'],$it['cantidad'],$pr,$subtotalItem]);
+
+        $stmtStock = $pdo->prepare("UPDATE productos SET stock=stock-? WHERE id=? AND stock>=?");
+        $stmtStock->execute([$it['cantidad'],$it['producto_id'],$it['cantidad']]);
+        if ($stmtStock->rowCount() !== 1) {
+          throw new Exception('Stock insuficiente para ' . sanitize($it['nombre']) . '.');
+        }
       }
       $pdo->prepare("DELETE FROM carrito WHERE usuario_id=?")->execute([$_SESSION['usuario_id']]);
       
@@ -189,7 +212,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       
       $pdo->commit();
       header('Location: '.SITE_URL.'/pedido-exitoso.php?id='.$pedidoId); exit;
-    } catch(Exception $e) { $pdo->rollBack(); $errores[]='Error al procesar. Intenta nuevamente.'; }
+    } catch(Exception $e) {
+      $pdo->rollBack();
+      error_log('checkout: ' . $e->getMessage());
+      $errores[] = 'Error al procesar. Intenta nuevamente.';
+      if (defined('APP_DEBUG') && APP_DEBUG) {
+        $errores[] = 'Detalle: ' . sanitize($e->getMessage());
+      }
+    }
   }
 }
 
