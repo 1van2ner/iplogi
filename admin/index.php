@@ -236,7 +236,25 @@ $wsU = $wU ? 'WHERE '.implode(' AND ',$wU) : '';
 $stmU = $pdo->prepare("SELECT u.*,(SELECT COUNT(*) FROM pedidos WHERE usuario_id=u.id) as n_pedidos FROM usuarios u $wsU ORDER BY u.creado_en DESC");
 $stmU->execute($pU); $usuariosList = $stmU->fetchAll();
 
-$pedidosAdmin = $pdo->query("SELECT p.*,u.nombre,u.apellido,u.email FROM pedidos p JOIN usuarios u ON p.usuario_id=u.id ORDER BY p.creado_en DESC LIMIT 50")->fetchAll();
+$q       = sanitize($_GET['q'] ?? '');
+$estado  = sanitize($_GET['estado'] ?? '');
+$entrega = sanitize($_GET['entrega'] ?? '');
+$where  = [];
+$params = [];
+if ($q)       { $where[] = '(p.codigo LIKE ? OR u.nombre LIKE ? OR u.email LIKE ?)'; $params[] = "%$q%"; $params[] = "%$q%"; $params[] = "%$q%"; }
+if ($estado)  { $where[] = 'p.estado=?';        $params[] = $estado; }
+if ($entrega) { $where[] = 'p.tipo_entrega=?';  $params[] = $entrega; }
+$ws = $where ? 'WHERE '.implode(' AND ',$where) : '';
+
+$totalPedidosFiltered = $pdo->prepare("SELECT COUNT(*) FROM pedidos p JOIN usuarios u ON p.usuario_id=u.id $ws");
+$totalPedidosFiltered->execute($params);
+$totalPedidosFiltered = (int)$totalPedidosFiltered->fetchColumn();
+
+$pedidosPorPagina = 50;
+$pedidosAdminStmt = $pdo->prepare("SELECT p.*, u.nombre, u.apellido, u.email, u.telefono, (SELECT COUNT(*) FROM detalle_pedidos WHERE pedido_id=p.id) as n_items FROM pedidos p JOIN usuarios u ON p.usuario_id=u.id $ws ORDER BY p.creado_en DESC LIMIT $pedidosPorPagina");
+$pedidosAdminStmt->execute($params);
+$pedidosAdmin = $pedidosAdminStmt->fetchAll();
+$totalPags = $pedidosPorPagina > 0 ? ceil($totalPedidosFiltered / $pedidosPorPagina) : 1;
 
 $editProd = null;
 if (isset($_GET['editprod'])) { $ep=$pdo->prepare("SELECT * FROM productos WHERE id=?"); $ep->execute([(int)$_GET['editprod']]); $editProd=$ep->fetch(); }
@@ -449,9 +467,6 @@ include '../includes/header.php';
       <a href="promociones.php"><i class="fas fa-fire"></i> Promociones del Mes</a>
       <a href="cupon.php" class="<?= $activeMenu === 'cupones' ? 'active' : '' ?>">
             <i class="fas fa-ticket"></i> Cupones
-      </a>
-      <a href="eventos.php" class="<?= $activeMenu === 'eventos' ? 'active' : '' ?>">
-        <i class="fas fa-calendar-day"></i> Eventos
       </a>
       <a href="?tab=pedidos"    class="<?= $tab==='pedidos'   ?'active':'' ?>">
         <i class="fas fa-shopping-bag"></i> Pedidos
@@ -775,47 +790,132 @@ include '../includes/header.php';
     <!-- ── PEDIDOS ─────────────────────────────────────────── -->
     <?php elseif ($tab === 'pedidos'): ?>
 
-    <h2 style="font-size:20px;font-weight:900;color:var(--blanco);margin-bottom:20px;"><i class="fas fa-shopping-bag" style="color:var(--amarillo-texto);"></i> Pedidos Recientes</h2>
     <div class="admin-orders">
-      <div class="panel">
-        <div style="overflow-x:auto;">
-          <table class="atbl">
-          <thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Entrega</th><th>Pago</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr></thead>
-          <tbody>
-          <?php foreach($pedidosAdmin as $ped): ?>
-          <?php
-            $entregaTipo = $ped['tipo_entrega'] ?? ($ped['tipo_envio'] ?? 'recojo_tienda');
-            $entregaTexto = match ($entregaTipo) {
-              'delivery' => '🚚 Delivery',
-              'provincia' => '🚚 Provincia',
-              'recojo_tienda' => '🏪 Tienda',
-              default => '🏪 Tienda'
-            };
-          ?>
-          <tr>
-            <td style="font-weight:800;color:var(--amarillo-texto);">#<?= str_pad($ped['id'],6,'0',STR_PAD_LEFT) ?></td>
-            <td>
-              <div style="font-weight:600;color:var(--blanco);"><?= sanitize($ped['nombre'].' '.$ped['apellido']) ?></div>
-              <div style="font-size:11px;color:var(--gris3);"><?= sanitize($ped['email']) ?></div>
-            </td>
-            <td style="font-weight:800;color:var(--amarillo-texto);"><?= formatPrice($ped['total']) ?></td>
-            <td style="font-size:12px;color:var(--gris3);"><?= $entregaTexto ?></td>
-            <td style="font-size:12px;color:var(--gris3);text-transform:capitalize;"><?= sanitize($ped['metodo_pago']??'-') ?></td>
-            <td><span class="eb eb-<?= $ped['estado'] ?>"><?= ucfirst($ped['estado']) ?></span></td>
-            <td style="font-size:11px;color:var(--gris3);"><?= date('d/m/Y H:i',strtotime($ped['creado_en'])) ?></td>
-            <td>
-              <select onchange="cambiarEstado(<?= $ped['id'] ?>,this.value)"
-                style="padding:4px 8px;background:var(--bg3);border:1px solid var(--borde);border-radius:6px;font-size:12px;color:var(--blanco);cursor:pointer;">
-                <?php foreach(['pendiente','confirmado','procesando','enviado','entregado','cancelado'] as $est): ?>
-                  <option value="<?= $est ?>" <?= $ped['estado']===$est?'selected':'' ?>><?= ucfirst($est) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </td>
-          </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+            <div>
+                <h2 style="font-size:22px;font-weight:900;color:var(--blanco);margin-bottom:8px;"><i class="fas fa-shopping-bag" style="color:var(--amarillo-texto);"></i> Pedidos</h2>
+                <p style="margin:0;color:var(--gris3);font-size:13px;">Busca, filtra y actualiza el estado de los pedidos directamente desde el panel.</p>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                <a href="?tab=pedidos" class="btn btn-secondary">Limpiar filtros</a>
+                <a href="pedido-detalle.php" class="btn btn-primary">Nuevo pedido</a>
+            </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;"> 
+            <?php
+            $estadoColors = ['pendiente'=>['#fef3c7','#92400e'],'almacen'=>['#dbeafe','#1e40af'],'enviado'=>['#d1fae5','#065f46']];
+            foreach ($estadoColors as $est => [$bg, $color]):
+            ?>
+                <a href="?tab=pedidos&estado=<?= $est ?>" style="padding:8px 16px;border-radius:24px;background:<?= $bg ?>;color:<?= $color ?>;font-size:13px;font-weight:700;text-decoration:none;border:1px solid <?= $estado === $est ? $color : 'transparent' ?>;">
+                    <?= ucfirst($est) ?>: <?= $stats[$est] ?? 0 ?>
+                </a>
+            <?php endforeach; ?>
+        </div>
+
+        <form method="GET" class="admin-orders-filters" style="margin-top:4px;">
+            <input type="hidden" name="tab" value="pedidos">
+            <?php if ($estado): ?><input type="hidden" name="estado" value="<?= $estado ?>"><?php endif; ?>
+            <input type="text" name="q" value="<?= $q ?>" placeholder="Buscar por código, usuario o email..." class="input-search">
+            <select name="entrega" class="input-select">
+                <option value="">Tipo de entrega</option>
+                <option value="delivery" <?= $entrega==='delivery' ? 'selected' : '' ?>>Delivery</option>
+                <option value="provincia" <?= $entrega==='provincia' ? 'selected' : '' ?>>Provincia</option>
+                <option value="recojo_tienda" <?= $entrega==='recojo_tienda' ? 'selected' : '' ?>>Recojo en tienda</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Filtrar</button>
+        </form>
+
+        <div class="admin-orders-top">
+            <div>
+                <h2 class="admin-orders-titlebar">Pedidos activos</h2>
+                <p class="admin-orders-subtitle">Visualiza los pedidos recientes y cambia el estado directamente desde el listado.</p>
+            </div>
+            <div class="admin-orders-summary"><strong><?= $totalPedidosFiltered ?></strong> pedidos encontrados</div>
+        </div>
+
+        <div class="admin-orders-table-wrap">
+            <table class="atbl">
+                <thead>
+                    <tr>
+                        <th class="cell-code">Código</th>
+                        <th class="cell-left">Cliente</th>
+                        <th class="cell-center">Items</th>
+                        <th class="cell-right">Total</th>
+                        <th class="cell-center">Entrega</th>
+                        <th class="cell-left">Pago</th>
+                        <th class="cell-center">Estado</th>
+                        <th class="cell-left">Fecha</th>
+                        <th class="cell-center">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    $pagoLabels = ['tarjeta_credito'=>'T. Crédito','tarjeta_debito'=>'T. Débito','yape'=>'Yape','plin'=>'Plin','transferencia'=>'Transf.','efectivo_contra_entrega'=>'Efectivo'];
+                    foreach ($pedidosAdmin as $p):
+                        $est = $estadoColors[$p['estado']] ?? ['#f1f5f9','#64748b'];
+                        $codigoMostrar = isset($p['codigo']) && $p['codigo'] ? sanitize($p['codigo']) : str_pad($p['id'],6,'0',STR_PAD_LEFT);
+                    ?>
+                    <tr>
+                        <td class="cell-code"><a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" class="order-code">#<?= $codigoMostrar ?></a></td>
+                        <td class="cell-left customer-cell">
+                            <div class="customer-name"><?= sanitize($p['nombre'].' '.$p['apellido']) ?></div>
+                            <div class="customer-meta"><?= sanitize($p['email']) ?></div>
+                            <?php if ($p['telefono']): ?><div class="customer-meta"><?= sanitize($p['telefono']) ?></div><?php endif; ?>
+                        </td>
+                        <td class="cell-center"><strong><?= $p['n_items'] ?></strong></td>
+                        <td class="cell-right order-total"><?= formatPrice($p['total']) ?></td>
+                        <td class="cell-center">
+                            <?php if ($p['tipo_entrega'] === 'delivery'): ?>
+                                <span class="badge badge-delivery"><i class="fas fa-truck"></i> Delivery</span>
+                            <?php elseif ($p['tipo_entrega'] === 'provincia'): ?>
+                                <span class="badge badge-province badge-province-img"><img src="<?= SITE_URL ?>/assets/img/provincia.svg" alt="Provincia" aria-hidden="true"> Provincia</span>
+                            <?php else: ?>
+                                <span class="badge badge-store"><i class="fas fa-store"></i> Tienda</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="cell-left payment-cell"><?= $pagoLabels[$p['metodo_pago']] ?? $p['metodo_pago'] ?></td>
+                        <td class="cell-center status-cell">
+                            <form method="POST" class="status-form">
+                                <input type="hidden" name="tab" value="pedidos">
+                                <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
+                                <?php if ($q): ?><input type="hidden" name="q" value="<?= $q ?>"><?php endif; ?>
+                                <?php if ($estado): ?><input type="hidden" name="estado" value="<?= $estado ?>"><?php endif; ?>
+                                <?php if ($entrega): ?><input type="hidden" name="entrega" value="<?= $entrega ?>"><?php endif; ?>
+                                <?php
+                                    $estadoOptions = $p['tipo_entrega'] === 'provincia'
+                                        ? ['pendiente','almacen','enviado']
+                                        : ['pendiente','procesando','enviado','entregado','cancelado'];
+                                    if (!in_array($p['estado'], $estadoOptions, true)) {
+                                        $estadoOptions[] = $p['estado'];
+                                    }
+                                ?>
+                                <select name="estado" class="status-select" onchange="this.form.submit()">
+                                    <?php foreach ($estadoOptions as $s): ?>
+                                        <option value="<?= $s ?>" <?= $p['estado'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </form>
+                        </td>
+                        <td class="cell-left date-cell">
+                            <div><?= date('d/m/y', strtotime($p['creado_en'])) ?></div>
+                            <div class="customer-meta"><?= date('H:i', strtotime($p['creado_en'])) ?></div>
+                        </td>
+                        <td class="cell-center action-cell"><a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" class="btn btn-edit">Ver / Editar</a></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($pedidosAdmin)): ?><tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gris3);">No hay pedidos</td></tr><?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <?php if ($totalPags > 1): ?>
+        <div class="pagination">
+            <?php for ($i=1;$i<=$totalPags;$i++): ?>
+                <a href="?tab=pedidos&pag=<?= $i ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $estado ? '&estado=' . $estado : '' ?><?= $entrega ? '&entrega=' . $entrega : '' ?>" class="page-link <?= $i === $pag ? 'active' : '' ?>"><?= $i ?></a>
+            <?php endfor; ?>
+        </div>
+        <?php endif; ?>
     </div>
 
     <?php endif; ?>

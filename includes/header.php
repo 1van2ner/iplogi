@@ -107,7 +107,7 @@ if (isset($_SESSION['flash_message'])) {
               <?php if (isAdmin()): ?>
                 <a href="<?= SITE_URL ?>/admin/index.php"><i class="fas fa-cog" style="color:var(--primary);width:16px;"></i> Panel Admin</a>
               <?php endif; ?>
-              <?php if (isLoggedIn() && ($_SESSION['rol'] ?? '') === 'repartidor'): ?>
+              <?php if (isAdmin() || (isLoggedIn() && ($_SESSION['rol'] ?? '') === 'repartidor')): ?>
                 <a href="<?= SITE_URL ?>/admin/pedidos.php"><i class="fas fa-truck" style="color:var(--primary);width:16px;"></i> Panel Pedidos</a>
               <?php endif; ?>
               <a href="<?= SITE_URL ?>/logout.php" class="danger"><i class="fas fa-sign-out-alt" style="color:var(--danger);width:16px;"></i> Cerrar Sesión</a>
@@ -186,10 +186,6 @@ if (isset($_SESSION['flash_message'])) {
         <li><a href="<?= SITE_URL ?>/productos.php?categoria=9"><i class="fas fa-bolt"></i> Energía</a></li>
         <li><a href="<?= SITE_URL ?>/contacto.php" <?= $currentPage === 'contacto.php' ? 'class="active"' : '' ?>>Contacto</a></li>
       </ul>
-      <?php $bfActive = isBlackFridayActive(); ?>
-      <a href="<?= SITE_URL ?>/Black_friday.php" class="nav-black-friday-float" style="<?= $bfActive ? '' : 'display:none;' ?>">
-        <img src="<?= SITE_URL ?>/assets/img/Black_friday.jgp.jpg" alt="Black Friday">
-      </a>
     </div>
 
   </nav>
@@ -219,17 +215,6 @@ if (isset($_SESSION['flash_message'])) {
           userWrap?.classList.remove('open'); // cerrar usuario si estaba abierto
         });
         catMenu.querySelector('.cat-dropdown')?.addEventListener('click', e => e.stopPropagation());
-      }
-
-      // ── Switch de Eventos → oculta/activa botón Black Friday ──
-      const bfSwitch = document.querySelector('#bf-event-switch');
-      const bfFloat = document.querySelector('.nav-black-friday-float');
-      if (bfSwitch && bfFloat) {
-        const syncBlackFridayVisibility = () => {
-          bfFloat.style.display = bfSwitch.checked ? 'none' : 'inline-block';
-        };
-        bfSwitch.addEventListener('change', syncBlackFridayVisibility);
-        syncBlackFridayVisibility();
       }
 
       // ── Cerrar ambos al hacer click fuera ─────────────────────

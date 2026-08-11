@@ -1036,7 +1036,6 @@ include '../includes/header.php';
                                         <option value="Aniversario de empresa" <?= $tipo_cupon === 'Aniversario de empresa' ? 'selected' : '' ?>>Aniversario de empresa</option>
                                         <option value="Cumpleaños" <?= $tipo_cupon === 'Cumpleaños' ? 'selected' : '' ?>>Cumpleaños</option>
                                         <option value="Cyber Days" <?= $tipo_cupon === 'Cyber Days' ? 'selected' : '' ?>>Cyber Days</option>
-                                        <option value="Black Friday" <?= $tipo_cupon === 'Black Friday' ? 'selected' : '' ?>>Black Friday</option>
                                         <option value="Campaña especial" <?= $tipo_cupon === 'Campaña especial' ? 'selected' : '' ?>>Campaña especial</option>
                                     </select>
                                 </div>

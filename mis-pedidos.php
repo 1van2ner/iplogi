@@ -51,7 +51,7 @@ $totalPedidos = (int)$s->fetchColumn();
 <div class="container">
   <div class="profile-layout">
 
-    <!-- SIDEBAR (misma que en perfil.php) -->
+    <!-- SIDEBAR -->
     <div class="profile-sidebar">
       <div class="profile-avatar"><i class="fas fa-user" style="font-size:32px;"></i></div>
       <div class="profile-name"><?= sanitize($user['nombre'].' '.($user['apellido']??'')) ?></div>
@@ -84,8 +84,8 @@ $totalPedidos = (int)$s->fetchColumn();
     <!-- CONTENIDO PRINCIPAL -->
     <div class="profile-content">
 
-      <!-- TÍTULO LLAMATIVO -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; background: linear-gradient(135deg, #bae90e, #bae90e); padding: 18px 22px; border-radius: 12px; color: #000000;">
+      <!-- TÍTULO LLAMATIVO CON SOMBRA -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; background: linear-gradient(135deg, #bae90e, #bae90e); padding: 18px 22px; border-radius: 12px; color: #f5f0f0; box-shadow: 0 8px 20px rgba(186, 233, 14, 0.35);">
           <div>
               <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #2b2a2a;"><i class="fas fa-shipping-fast"></i> Panel de Control y Seguimiento</h1>
               <p style="margin: 4px 0 0 0; font-size: 13px; font-weight: 600; color: #000000;">Visualización de pedidos y rastreo de estado en tiempo real</p>
@@ -95,13 +95,14 @@ $totalPedidos = (int)$s->fetchColumn();
           </div>
       </div>
 
-      <!-- TABLA LIMPIA (SOLO LECTURA) -->
+      <!-- TABLA -->
       <div style="background: white; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.04); overflow: hidden; border: 1px solid #e2e8f0;">
           <div style="overflow-x: auto;">
               <table style="width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap;">
                   <thead>
                       <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #000000; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">
                           <th style="padding: 14px 18px; color: #000000;">Cliente</th>
+                          <th style="padding: 14px 18px; color: #000000;">Tipo de Entrega</th>
                           <th style="padding: 14px 18px; color: #000000;">Estado Actual</th>
                           <th style="padding: 14px 18px; color: #000000;">Total</th>
                           <th style="padding: 14px 18px; text-align: center; color: #000000;">Acción / Seguimiento</th>
@@ -110,7 +111,7 @@ $totalPedidos = (int)$s->fetchColumn();
                   <tbody>
                       <?php if (empty($pedidos)): ?>
                           <tr>
-                              <td colspan="4" style="padding: 30px; text-align: center; color: #64748b; font-weight: 600;">
+                              <td colspan="5" style="padding: 30px; text-align: center; color: #64748b; font-weight: 600;">
                                   No hay pedidos registrados en este momento.
                               </td>
                           </tr>
@@ -121,13 +122,20 @@ $totalPedidos = (int)$s->fetchColumn();
                               $badgeBg = '#f1f5f9';
                               $badgeColor = '#000000';
                               if ($p['estado'] == 'pendiente') { $badgeBg = '#fef3c7'; $badgeColor = '#000000'; }
-                              elseif ($p['estado'] == 'procesando') { $badgeBg = '#e0f2fe'; $badgeColor = '#000000'; }
+                              elseif ($p['estado'] == 'procesando' || $p['estado'] == 'almacen') { $badgeBg = '#e0f2fe'; $badgeColor = '#000000'; }
                               elseif ($p['estado'] == 'enviado') { $badgeBg = '#ede9fe'; $badgeColor = '#000000'; }
                               elseif ($p['estado'] == 'entregado') { $badgeBg = '#d1fae5'; $badgeColor = '#000000'; }
+
+                              $tipoEntrega = !empty($p['tipo_entrega']) ? $p['tipo_entrega'] : 'lima';
                           ?>
                           <tr style="border-bottom: 1px solid #f1f5f9; background: <?= $bgRow ?>;">
                               <td style="padding: 14px 18px; color: #000000; font-weight: 700;">
                                   <?= htmlspecialchars(($p['nombre'] ?? '') . ' ' . ($p['apellido'] ?? '')) ?>
+                              </td>
+                              <td style="padding: 14px 18px;">
+                                  <span style="display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; background: #f1f5f9; color: #334155; text-transform: uppercase;">
+                                      <?= htmlspecialchars($tipoEntrega) ?>
+                                  </span>
                               </td>
                               <td style="padding: 14px 18px;">
                                   <span style="display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 12px; background: <?= $badgeBg ?>; color: <?= $badgeColor ?>; text-transform: capitalize;">
@@ -138,7 +146,7 @@ $totalPedidos = (int)$s->fetchColumn();
                                   $<?= number_format($p['total'], 2) ?>
                               </td>
                               <td style="padding: 14px 18px; text-align: center;">
-                                  <button type="button" onclick="verSeguimiento('<?= htmlspecialchars((string)$p['id']) ?>', '<?= htmlspecialchars($p['estado']) ?>')" style="background: linear-gradient(135deg, #c8ff00, #c8ff00); color: #000000; border: none; padding: 9px 18px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 10px rgba(0,0,0,0.12);">
+                                  <button type="button" onclick="verSeguimiento('<?= htmlspecialchars((string)$p['id']) ?>', '<?= htmlspecialchars($p['estado']) ?>', '<?= htmlspecialchars($tipoEntrega) ?>')" style="background: linear-gradient(135deg, #c8ff00, #c8ff00); color: #000000; border: none; padding: 9px 18px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 4px 10px rgba(0,0,0,0.12);">
                                       <i class="fas fa-route" style="color: #000000;"></i> Seguir
                                   </button>
                               </td>
@@ -155,9 +163,9 @@ $totalPedidos = (int)$s->fetchColumn();
   </div><!-- /profile-layout -->
 </div><!-- /container -->
 
-<!-- MODAL DE SEGUIMIENTO CON LETRAS NEGRAS -->
+<!-- MODAL DE SEGUIMIENTO -->
 <div id="modalSeguimiento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index:9999; align-items:center; justify-content:center;">
-    <div style="background:white; padding:35px 40px; border-radius:20px; width:92%; max-width:800px; position:relative; box-shadow: 0 25px 50px rgba(0,0,0,0.25);">
+    <div style="background:white; padding:35px 40px; border-radius:20px; width:92%; max-width:850px; position:relative; box-shadow: 0 25px 50px rgba(0,0,0,0.25);">
         
         <!-- CABECERA DEL MODAL -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; border-bottom:1px solid #f1f5f9; padding-bottom:18px;">
@@ -172,7 +180,7 @@ $totalPedidos = (int)$s->fetchColumn();
             </button>
         </div>
         
-        <!-- CONTENEDOR UNIFICADO DE LA LÍNEA Y LOS 4 PASOS -->
+        <!-- CONTENEDOR UNIFICADO DE LA LÍNEA Y LOS PASOS -->
         <div style="padding: 0 28px; margin-bottom: 40px; margin-top: 10px;">
             <div style="position:relative; width:100%;">
                 
@@ -182,45 +190,9 @@ $totalPedidos = (int)$s->fetchColumn();
                     <div id="barraProgreso" style="position:absolute; top:0; left:0; width:0%; height:8px; background:linear-gradient(90deg, #10b981, #059669); border-radius:4px; transition: width 0.5s ease;"></div>
                 </div>
 
-                <!-- 2. Los 4 Nodos distribuidos en flex -->
-                <div style="display:flex; justify-content:space-between; align-items:center; position:relative; z-index:3;">
-                    
-                    <!-- PASO 1: Pendiente -->
-                    <div class="step-col" data-index="0" style="text-align:center; flex:0 0 auto;">
-                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
-                            <i class="fas fa-check" style="color: #000000;"></i>
-                        </div>
-                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Pendiente</div>
-                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
-                    </div>
-
-                    <!-- PASO 2: Procesando -->
-                    <div class="step-col" data-index="1" style="text-align:center; flex:0 0 auto;">
-                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
-                            <i class="fas fa-box" style="color: #000000;"></i>
-                        </div>
-                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Procesando</div>
-                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
-                    </div>
-
-                    <!-- PASO 3: Enviado -->
-                    <div class="step-col" data-index="2" style="text-align:center; flex:0 0 auto;">
-                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
-                            <i class="fas fa-check" style="color: #000000;"></i>
-                        </div>
-                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Enviado</div>
-                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
-                    </div>
-
-                    <!-- PASO 4: Entregado -->
-                    <div class="step-col" data-index="3" style="text-align:center; flex:0 0 auto;">
-                        <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; background:white; border:2px solid #cbd5e1; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#000000; font-size:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition:all 0.3s;">
-                            <i class="fas fa-check" style="color: #000000;"></i>
-                        </div>
-                        <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">Entregado</div>
-                        <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; background:#f1f5f9; color:#000000;">Pendiente</div>
-                    </div>
-
+                <!-- 2. Contenedor de Pasos Dinámico -->
+                <div id="contenedorPasos" style="display:flex; justify-content:space-between; align-items:center; position:relative; z-index:3;">
+                    <!-- Se llena con JavaScript -->
                 </div>
 
             </div>
@@ -236,7 +208,7 @@ $totalPedidos = (int)$s->fetchColumn();
             </div>
         </div>
 
-        <!-- PIE DE MODAL (BOTÓN CERRAR) -->
+        <!-- PIE DE MODAL -->
         <div style="text-align: right;">
             <button type="button" onclick="document.getElementById('modalSeguimiento').style.display='none'" style="padding:12px 28px; background:#e2e8f0; border:none; border-radius:10px; cursor:pointer; font-weight:800; color:#000000; font-size:14px; display:inline-flex; align-items:center; gap:8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <i class="fas fa-times-circle" style="color: #000000;"></i> Cerrar Ventana
@@ -247,61 +219,65 @@ $totalPedidos = (int)$s->fetchColumn();
 </div>
 
 <script>
-function verSeguimiento(codigo, estadoActual) {
+function verSeguimiento(codigo, estadoActual, tipoEntrega) {
     const modal = document.getElementById('modalSeguimiento');
     document.getElementById('modalTitulo').innerText = 'Seguimiento del Pedido: #' + codigo;
     modal.style.display = 'flex';
 
-    let stepIndex = 0;
-    if (estadoActual === 'pendiente') stepIndex = 0;
-    else if (estadoActual === 'procesando') stepIndex = 1;
-    else if (estadoActual === 'enviado') stepIndex = 2;
-    else if (estadoActual === 'entregado') stepIndex = 3;
+    const tipo = (tipoEntrega || 'lima').toLowerCase();
+    const estado = estadoActual.toLowerCase();
+    
+    let estadosMap, nombresPasos, iconosPasos, porcentajes;
 
-    const porcentajes = [0, 33.33, 66.66, 100];
+    if (tipo.includes('provincia')) {
+        // FLUJO PROVINCIA DE 3 PASOS: Pendiente -> En Almacén -> Enviado
+        estadosMap = { 'pendiente': 0, 'procesando': 1, 'almacen': 1, 'enviado': 2 };
+        nombresPasos = ['Pendiente', 'En Almacén', 'Enviado'];
+        iconosPasos = ['fa-check', 'fa-warehouse', 'fa-shipping-fast'];
+        porcentajes = [0, 50, 100];
+    } else {
+        // FLUJO LIMA DE 4 PASOS: Pendiente -> Procesando -> Enviado -> Entregado
+        estadosMap = { 'pendiente': 0, 'procesando': 1, 'enviado': 2, 'entregado': 3 };
+        nombresPasos = ['Pendiente', 'Procesando', 'Enviado', 'Entregado'];
+        iconosPasos = ['fa-check', 'fa-box', 'fa-shipping-fast', 'fa-flag-checkered'];
+        porcentajes = [0, 33.33, 66.66, 100];
+    }
+
+    let stepIndex = estadosMap[estado] !== undefined ? estadosMap[estado] : 0;
     document.getElementById('barraProgreso').style.width = porcentajes[stepIndex] + '%';
 
-    const cols = document.querySelectorAll('.step-col');
-    const nombresPasos = ['Pendiente', 'Procesando', 'Enviado', 'Entregado'];
+    const contenedorPasos = document.getElementById('contenedorPasos');
+    contenedorPasos.innerHTML = '';
 
-    cols.forEach((col, idx) => {
-        const iconWrap = col.querySelector('.step-icon-wrap');
-        const badge = col.querySelector('.step-badge');
-        
-        let iconHtml = '<i class="fas fa-check" style="color: #000000;"></i>';
-        if (idx === 1) iconHtml = '<i class="fas fa-box" style="color: #000000;"></i>';
+    const maxIndex = nombresPasos.length - 1;
+    const esTotalmenteCompletado = (stepIndex === maxIndex);
 
-        if (idx < stepIndex) {
-            iconWrap.style.background = '#ffffff';
-            iconWrap.style.borderColor = '#10b981';
-            iconWrap.style.color = '#000000';
-            iconWrap.style.boxShadow = '0 4px 12px rgba(16,185,129,0.2)';
-            iconWrap.innerHTML = '<i class="fas fa-check" style="color: #000000;"></i>';
-            
-            badge.style.background = '#d1fae5';
-            badge.style.color = '#000000';
-            badge.innerText = 'Completado';
+    nombresPasos.forEach((nombre, idx) => {
+        let iconClass = iconosPasos[idx];
+        let estiloIcon = 'background:white; border:2px solid #cbd5e1; box-shadow:0 4px 10px rgba(0,0,0,0.05); color:#000000;';
+        let estiloBadge = 'background:#f1f5f9; color:#000000;';
+        let textoBadge = 'Pendiente';
+
+        if (esTotalmenteCompletado || idx < stepIndex) {
+            estiloIcon = 'background:#d1fae5; border:2px solid #10b981; box-shadow:0 4px 12px rgba(16,185,129,0.2); color:#065f46;';
+            estiloBadge = 'background:#d1fae5; color:#065f46;';
+            textoBadge = 'Completado';
         } else if (idx === stepIndex) {
-            iconWrap.style.background = '#fffffd';
-            iconWrap.style.borderColor = '#ffffff';
-            iconWrap.style.color = '#000000';
-            iconWrap.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
-            iconWrap.innerHTML = iconHtml;
-            
-            badge.style.background = '#f2ffb0';
-            badge.style.color = '#000000';
-            badge.innerText = 'En curso';
-        } else {
-            iconWrap.style.background = '#ffffff';
-            iconWrap.style.borderColor = '#cbd5e1';
-            iconWrap.style.color = '#000000';
-            iconWrap.style.boxShadow = 'none';
-            iconWrap.innerHTML = iconHtml;
-            
-            badge.style.background = '#f1f5f9';
-            badge.style.color = '#2b2b2b';
-            badge.innerText = 'Pendiente';
+            estiloIcon = 'background:#f2ffb0; border:2px solid #c8ff00; box-shadow:0 6px 20px rgba(0,0,0,0.15); color:#000000;';
+            estiloBadge = 'background:#f2ffb0; color:#000000;';
+            textoBadge = 'En curso';
         }
+
+        const stepHtml = `
+            <div class="step-col" data-index="${idx}" style="text-align:center; flex:0 0 auto;">
+                <div class="step-icon-wrap" style="width:56px; height:56px; border-radius:50%; margin:0 auto; display:flex; align-items:center; justify-content:center; font-size:20px; transition:all 0.3s; ${estiloIcon}">
+                    <i class="fas ${iconClass}"></i>
+                </div>
+                <div style="font-weight:800; color:#000000; font-size:15px; margin-top:12px;">${nombre}</div>
+                <div class="step-badge" style="display:inline-block; margin-top:6px; padding:4px 12px; border-radius:12px; font-size:11px; font-weight:800; ${estiloBadge}">${textoBadge}</div>
+            </div>
+        `;
+        contenedorPasos.innerHTML += stepHtml;
     });
 
     document.getElementById('textoEstadoActual').innerText = nombresPasos[stepIndex];

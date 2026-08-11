@@ -3610,6 +3610,8 @@ textarea {
 .badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;}
 .badge-delivery{background:#ebf3ff;color:#1f4ed8;border:1px solid rgba(59,130,246,.16);}
 .badge-store{background:#ecfdf5;color:#15803d;border:1px solid rgba(16,185,129,.16);}
+.badge-province{background:#f3f4f6;color:#1f2937;border:1px solid rgba(148,163,184,.35);display:inline-flex;align-items:center;gap:8px;}
+.badge-province-img img{width:18px;height:18px;display:block;}
 .status-select{width:100%;max-width:160px;border-radius:14px;border:1px solid rgba(226,232,240,.9);padding:10px 12px;background:#fff;color:var(--gris1);font-size:13px;}
 .pagination{display:flex;justify-content:center;gap:10px;padding:18px 18px 22px;background:#fff;border:1px solid rgba(226,232,240,.9);border-radius:0 0 22px 22px;}
 .page-link{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;border:1px solid rgba(226,232,240,.9);color:var(--gris2);text-decoration:none;font-weight:700;}

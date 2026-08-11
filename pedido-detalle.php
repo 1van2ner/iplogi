@@ -82,7 +82,7 @@ include 'includes/header.php';
             <div style="background:#fff;border:1px solid rgba(226,232,240,.9);border-radius:20px;padding:18px;">
                 <h3 style="margin:0 0 12px;font-size:16px;color:var(--gris1);">Entrega y pago</h3>
                 <div style="display:grid;gap:10px;font-size:14px;color:var(--gris3);">
-                    <div><strong>Tipo entrega:</strong> <?= $pedido['tipo_entrega'] === 'delivery' ? 'Delivery' : 'Recojo en tienda' ?></div>
+                    <div><strong>Tipo entrega:</strong> <?= $pedido['tipo_entrega'] === 'delivery' ? 'Delivery' : ($pedido['tipo_entrega'] === 'provincia' ? 'Provincia' : 'Recojo en tienda') ?></div>
                     <?php if (!empty($pedido['distrito_entrega']) || !empty($pedido['direccion_entrega'])): ?>
                         <div><strong>Dirección:</strong> <?= sanitize(trim(($pedido['distrito_entrega'] ?? '') . ' ' . ($pedido['direccion_entrega'] ?? ''))) ?></div>
                     <?php endif; ?>
@@ -101,7 +101,6 @@ include 'includes/header.php';
                     <th style="padding:14px 16px;border-bottom:1px solid rgba(226,232,240,.95);text-align:center;">Cantidad</th>
                     <th style="padding:14px 16px;border-bottom:1px solid rgba(226,232,240,.95);text-align:right;">Precio</th>
                     <th style="padding:14px 16px;border-bottom:1px solid rgba(226,232,240,.95);text-align:right;">Subtotal</th>
-                    <th style="padding:14px 16px;border-bottom:1px solid rgba(226,232,240,.95);text-align:center;">Estado</th>
                 </tr>
             </thead>
             <tbody>
@@ -112,7 +111,6 @@ include 'includes/header.php';
                         <td style="padding:14px 16px;vertical-align:middle;text-align:center;"><?= (int)$item['cantidad'] ?></td>
                         <td style="padding:14px 16px;vertical-align:middle;text-align:right;"><?= formatPrice($item['precio_unitario']) ?></td>
                         <td style="padding:14px 16px;vertical-align:middle;text-align:right;"><?= formatPrice($item['subtotal']) ?></td>
-                        <td style="padding:14px 16px;vertical-align:middle;text-align:center;"><?= ucfirst($item['estado'] ?? 'pendiente') ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

@@ -33,10 +33,14 @@ switch ($accion) {
 
     // ── Cambiar estado del pedido (global) ──────────────────────────────────────
     case 'estado':
-        $estadosValidos = ['pendiente','confirmado','procesando','enviado','entregado','cancelado'];
+        if ($pedido['tipo_entrega'] === 'provincia') {
+            $estadosValidos = ['pendiente','almacen','enviado','cancelado'];
+        } else {
+            $estadosValidos = ['pendiente','procesando','enviado','entregado','cancelado'];
+        }
         $nuevoEstado = $_POST['estado'] ?? '';
 
-        if (!in_array($nuevoEstado, $estadosValidos)) {
+        if (!in_array($nuevoEstado, $estadosValidos, true)) {
             echo json_encode(['success'=>false,'message'=>'Estado no válido']);
             exit;
         }
@@ -75,7 +79,11 @@ switch ($accion) {
     case 'producto_estado':
         $detalleId = (int)($_POST['detalle_id'] ?? 0);
         $nuevoEstado = $_POST['estado'] ?? '';
-        $estadosValidos = ['pendiente','confirmado','procesando','enviado','entregado','cancelado'];
+        if ($pedido['tipo_entrega'] === 'provincia') {
+            $estadosValidos = ['pendiente','almacen','enviado','cancelado'];
+        } else {
+            $estadosValidos = ['pendiente','procesando','enviado','entregado','cancelado'];
+        }
 
         if (!$detalleId || !in_array($nuevoEstado, $estadosValidos, true)) {
             echo json_encode(['success'=>false,'message'=>'Detalle o estado inválido']);

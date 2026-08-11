@@ -10,8 +10,17 @@ $pdo = getDB();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pedido_id'])) {
     $pid    = (int)$_POST['pedido_id'];
     $estado = $_POST['estado'] ?? '';
-    $allowed = ['pendiente','confirmado','procesando','enviado','entregado','cancelado'];
-    if (in_array($estado, $allowed)) {
+    $tipoEntregaStmt = $pdo->prepare("SELECT tipo_entrega FROM pedidos WHERE id = ?");
+    $tipoEntregaStmt->execute([$pid]);
+    $tipoEntrega = $tipoEntregaStmt->fetchColumn();
+
+    if ($tipoEntrega === 'provincia') {
+        $allowed = ['pendiente','almacen','enviado','cancelado'];
+    } else {
+        $allowed = ['pendiente','procesando','enviado','entregado','cancelado'];
+    }
+
+    if (in_array($estado, $allowed, true)) {
         $pdo->prepare("UPDATE pedidos SET estado=? WHERE id=?")->execute([$estado,$pid]);
     }
 }
@@ -60,7 +69,7 @@ include '../includes/header.php';
     <!-- BADGES ESTADO -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
         <?php
-        $estadoColors = ['pendiente'=>['#fef3c7','#92400e'],'confirmado'=>['#dbeafe','#1e40af'],'procesando'=>['#ede9fe','#5b21b6'],'enviado'=>['#d1fae5','#065f46'],'entregado'=>['#dcfce7','#166534'],'cancelado'=>['#fee2e2','#991b1b']];
+        $estadoColors = ['pendiente'=>['#fef3c7','#92400e'],'almacen'=>['#dbeafe','#1e40af'],'enviado'=>['#d1fae5','#065f46']];
         foreach ($estadoColors as $est=>[$bg,$color]):
         ?>
         <a href="pedidos.php?estado=<?= $est ?>" style="padding:6px 14px;border-radius:20px;background:<?= $bg ?>;color:<?= $color ?>;font-size:12px;font-weight:700;text-decoration:none;border:1.5px solid <?= $estado===$est?$color:'transparent' ?>;">
@@ -79,6 +88,7 @@ include '../includes/header.php';
         <select name="entrega" class="input-select">
             <option value="">Tipo de entrega</option>
             <option value="delivery" <?= $entrega==='delivery'?'selected':'' ?>>Delivery</option>
+            <option value="provincia" <?= $entrega==='provincia'?'selected':'' ?>>Provincia</option>
             <option value="recojo_tienda" <?= $entrega==='recojo_tienda'?'selected':'' ?>>Recojo en tienda</option>
         </select>
         <button type="submit" class="btn btn-primary">Filtrar</button>
@@ -130,6 +140,8 @@ include '../includes/header.php';
                         <td class="cell-center">
                             <?php if ($p['tipo_entrega'] === 'delivery'): ?>
                                 <span class="badge badge-delivery"><i class="fas fa-truck"></i> Delivery</span>
+                            <?php elseif ($p['tipo_entrega'] === 'provincia'): ?>
+                                <span class="badge badge-province badge-province-img"><img src="<?= SITE_URL ?>/assets/img/provincia.svg" alt="Provincia" aria-hidden="true"> Provincia</span>
                             <?php else: ?>
                                 <span class="badge badge-store"><i class="fas fa-store"></i> Tienda</span>
                             <?php endif; ?>
@@ -142,8 +154,16 @@ include '../includes/header.php';
                                 <?php if ($estado): ?><input type="hidden" name="estado" value="<?= $estado ?>"><?php endif; ?>
                                 <?php if ($entrega): ?><input type="hidden" name="entrega" value="<?= $entrega ?>"><?php endif; ?>
                                 <input type="hidden" name="pag" value="<?= $pag ?>">
+                                <?php
+                                    $estadoOptions = $p['tipo_entrega'] === 'provincia'
+                                        ? ['pendiente','almacen','enviado']
+                                        : ['pendiente','procesando','enviado','entregado','cancelado'];
+                                    if (!in_array($p['estado'], $estadoOptions, true)) {
+                                        $estadoOptions[] = $p['estado'];
+                                    }
+                                ?>
                                 <select name="estado" class="status-select" onchange="this.form.submit()">
-                                    <?php foreach (['pendiente','confirmado','procesando','enviado','entregado','cancelado'] as $s): ?>
+                                    <?php foreach ($estadoOptions as $s): ?>
                                         <option value="<?= $s ?>" <?= $p['estado'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
                                     <?php endforeach; ?>
                                 </select>

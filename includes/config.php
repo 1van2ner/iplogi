@@ -171,14 +171,6 @@ function setAppSetting($clave, $valor) {
     $stmt->execute([$clave, $valor]);
 }
 
-function isBlackFridayActive() {
-    return getAppSetting('black_friday_active', '1') === '1';
-}
-
-function setBlackFridayActive($active) {
-    setAppSetting('black_friday_active', $active ? '1' : '0');
-}
-
 // Devuelve el HTML de precio + botón, o un bloque de "inicia sesión" si no hay login
 function renderPrecioCarrito($p, $precio, $desc, $idProducto) {
     if (!isLoggedIn()) {
