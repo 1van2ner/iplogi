@@ -1,7 +1,8 @@
 <?php
 require_once '../includes/config.php';
 requireLogin();
-if (!isAdmin()) {
+// Permitir acceso a administradores y al rol de reparto (repartidor)
+if (!isAdmin() && ($_SESSION['rol'] ?? '') !== 'repartidor') {
     http_response_code(403);
     echo json_encode(['success'=>false,'message'=>'Acceso denegado']);
     exit;
@@ -124,6 +125,11 @@ switch ($accion) {
 
     // ── Eliminar pedido (solo admin superadmin) ─────────────
     case 'eliminar':
+        // Solo administradores pueden eliminar pedidos definitivamente
+        if (!isAdmin()) {
+            echo json_encode(['success'=>false,'message'=>'Solo administradores pueden eliminar pedidos']);
+            exit;
+        }
         if ($pedido['estado'] !== 'cancelado') {
             echo json_encode(['success'=>false,'message'=>'Solo se pueden eliminar pedidos cancelados']);
             exit;

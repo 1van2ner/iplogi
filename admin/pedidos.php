@@ -1,7 +1,8 @@
 <?php
 require_once '../includes/config.php';
 requireLogin();
-if (!isAdmin()) { header('Location: ' . SITE_URL . '/index.php'); exit; }
+// Permitir acceso a administradores y al rol de reparto (repartidor)
+if (!isAdmin() && ($_SESSION['rol'] ?? '') !== 'repartidor') { header('Location: ' . SITE_URL . '/index.php'); exit; }
 $pageTitle = 'Gestión de Pedidos';
 $pdo = getDB();
 
@@ -45,6 +46,7 @@ $pedidos = $stmt->fetchAll();
 
 // Stats rápidas
 $stats = $pdo->query("SELECT estado, COUNT(*) as n FROM pedidos GROUP BY estado")->fetchAll(PDO::FETCH_KEY_PAIR);
+$isAdmin = isAdmin();
 
 include '../includes/header.php';
 ?>
@@ -71,93 +73,104 @@ include '../includes/header.php';
     </div>
 
     <!-- FILTROS -->
-    <form method="GET" style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+    <form method="GET" class="admin-orders-filters">
         <?php if ($estado): ?><input type="hidden" name="estado" value="<?= $estado ?>"><?php endif; ?>
-        <input type="text" name="q" value="<?= $q ?>" placeholder="Buscar por código, nombre, email..." style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;flex:1;min-width:220px;">
-        <select name="entrega" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;">
+        <input type="text" name="q" value="<?= $q ?>" placeholder="Buscar por código, nombre, email..." class="input-search">
+        <select name="entrega" class="input-select">
             <option value="">Tipo de entrega</option>
             <option value="delivery" <?= $entrega==='delivery'?'selected':'' ?>>Delivery</option>
             <option value="recojo_tienda" <?= $entrega==='recojo_tienda'?'selected':'' ?>>Recojo en tienda</option>
         </select>
-        <button type="submit" style="padding:8px 18px;background:var(--primary);color:white;border:none;border-radius:var(--radius);cursor:pointer;font-size:14px;font-weight:600;">Filtrar</button>
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+        <?php if ($estado): ?><a href="pedidos.php" class="btn btn-secondary">Quitar filtro</a><?php endif; ?>
     </form>
 
-    <div style="background:white;border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;">
-        <div style="padding:12px 20px;background:var(--light);border-bottom:1px solid var(--border);font-size:13px;color:var(--gray);">
-            <strong><?= $total ?></strong> pedidos encontrados
+    <div class="admin-orders">
+        <div class="admin-orders-top">
+            <div>
+                <h2>Gestión de Pedidos</h2>
+                <p class="admin-orders-subtitle">Monitorea y actualiza el estado de los pedidos desde el panel administrativo.</p>
+            </div>
+            <div class="admin-orders-summary"><strong><?= $total ?></strong> pedidos encontrados</div>
         </div>
-        <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+
+        <div class="admin-orders-table-wrap">
+            <table class="atbl">
                 <thead>
-                    <tr style="background:#f8fafc;">
-                        <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Código</th>
-                        <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Cliente</th>
-                        <th style="padding:10px 14px;text-align:center;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Items</th>
-                        <th style="padding:10px 14px;text-align:right;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Total</th>
-                        <th style="padding:10px 14px;text-align:center;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Entrega</th>
-                        <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Pago</th>
-                        <th style="padding:10px 14px;text-align:center;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Estado</th>
-                        <th style="padding:10px 14px;text-align:left;font-weight:700;color:var(--gray);border-bottom:1px solid var(--border);">Fecha</th>
+                    <tr>
+                        <th class="cell-code">Código</th>
+                        <th class="cell-left">Cliente</th>
+                        <th class="cell-center">Items</th>
+                        <th class="cell-right">Total</th>
+                        <th class="cell-center">Entrega</th>
+                        <th class="cell-left">Pago</th>
+                        <th class="cell-center">Estado</th>
+                        <th class="cell-left">Fecha</th>
+                        <?php if ($isAdmin): ?>
+                        <th class="cell-center">Acción</th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($pedidos as $p):
+                    <?php
+                    $pagoLabels = ['tarjeta_credito'=>'T. Crédito','tarjeta_debito'=>'T. Débito','yape'=>'Yape','plin'=>'Plin','transferencia'=>'Transf.','efectivo_contra_entrega'=>'Efectivo'];
+                    foreach ($pedidos as $p):
                         $est = $estadoColors[$p['estado']] ?? ['#f1f5f9','#64748b'];
+                        $codigoMostrar = isset($p['codigo']) && $p['codigo'] ? sanitize($p['codigo']) : str_pad($p['id'],6,'0',STR_PAD_LEFT);
                     ?>
-                    <tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
-                        <td style="padding:10px 14px;">
-                            <a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" target="_blank" style="font-weight:700;color:var(--primary);text-decoration:none;"><?= sanitize($p['codigo']) ?></a>
+                    <tr>
+                        <td class="cell-code"><a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" class="order-code">#<?= $codigoMostrar ?></a></td>
+                        <td class="cell-left customer-cell">
+                            <div class="customer-name"><?= sanitize($p['nombre'].' '.$p['apellido']) ?></div>
+                            <div class="customer-meta"><?= sanitize($p['email']) ?></div>
+                            <?php if ($p['telefono']): ?><div class="customer-meta"><?= sanitize($p['telefono']) ?></div><?php endif; ?>
                         </td>
-                        <td style="padding:10px 14px;">
-                            <div style="font-weight:600;"><?= sanitize($p['nombre'].' '.$p['apellido']) ?></div>
-                            <div style="font-size:11px;color:var(--gray);"><?= sanitize($p['email']) ?></div>
-                            <?php if ($p['telefono']): ?><div style="font-size:11px;color:var(--gray);"><?= sanitize($p['telefono']) ?></div><?php endif; ?>
-                        </td>
-                        <td style="padding:10px 14px;text-align:center;font-weight:600;"><?= $p['n_items'] ?></td>
-                        <td style="padding:10px 14px;text-align:right;font-weight:800;color:var(--primary);"><?= formatPrice($p['total']) ?></td>
-                        <td style="padding:10px 14px;text-align:center;">
-                            <?php if ($p['tipo_entrega']==='delivery'): ?>
-                                <span style="font-size:11px;background:#eff6ff;color:var(--primary);padding:2px 8px;border-radius:10px;font-weight:700;"><i class="fas fa-truck"></i> Delivery</span>
+                        <td class="cell-center"><strong><?= $p['n_items'] ?></strong></td>
+                        <td class="cell-right order-total"><?= formatPrice($p['total']) ?></td>
+                        <td class="cell-center">
+                            <?php if ($p['tipo_entrega'] === 'delivery'): ?>
+                                <span class="badge badge-delivery"><i class="fas fa-truck"></i> Delivery</span>
                             <?php else: ?>
-                                <span style="font-size:11px;background:#f0fdf4;color:var(--success);padding:2px 8px;border-radius:10px;font-weight:700;"><i class="fas fa-store"></i> Tienda</span>
+                                <span class="badge badge-store"><i class="fas fa-store"></i> Tienda</span>
                             <?php endif; ?>
                         </td>
-                        <td style="padding:10px 14px;font-size:12px;color:var(--gray);">
-                            <?php $pagoLabels = ['tarjeta_credito'=>'T. Crédito','tarjeta_debito'=>'T. Débito','yape'=>'Yape','plin'=>'Plin','transferencia'=>'Transf.','efectivo_contra_entrega'=>'Efectivo'];
-                            echo $pagoLabels[$p['metodo_pago']] ?? $p['metodo_pago']; ?>
-                        </td>
-                        <td style="padding:10px 14px;text-align:center;">
-                            <form method="POST" style="display:inline;">
+                        <td class="cell-left payment-cell"><?= $pagoLabels[$p['metodo_pago']] ?? $p['metodo_pago'] ?></td>
+                        <td class="cell-center status-cell">
+                            <form method="POST" class="status-form">
                                 <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-                                <input type="hidden" name="<?= $q?"q=$q&":"" ?><?= $estado?"estado=$estado&":"" ?>pag=<?= $pag ?>" value="">
-                                <select name="estado" onchange="this.form.submit()"
-                                        style="border:1.5px solid <?= $est[1] ?>;background:<?= $est[0] ?>;color:<?= $est[1] ?>;border-radius:12px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;">
+                                <?php if ($q): ?><input type="hidden" name="q" value="<?= $q ?>"><?php endif; ?>
+                                <?php if ($estado): ?><input type="hidden" name="estado" value="<?= $estado ?>"><?php endif; ?>
+                                <?php if ($entrega): ?><input type="hidden" name="entrega" value="<?= $entrega ?>"><?php endif; ?>
+                                <input type="hidden" name="pag" value="<?= $pag ?>">
+                                <select name="estado" class="status-select" onchange="this.form.submit()">
                                     <?php foreach (['pendiente','confirmado','procesando','enviado','entregado','cancelado'] as $s): ?>
-                                        <option value="<?= $s ?>" <?= $p['estado']===$s?'selected':'' ?>><?= ucfirst($s) ?></option>
+                                        <option value="<?= $s ?>" <?= $p['estado'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </form>
                         </td>
-                        <td style="padding:10px 14px;font-size:12px;color:var(--gray);">
-                            <?= date('d/m/y', strtotime($p['creado_en'])) ?><br>
-                            <?= date('H:i', strtotime($p['creado_en'])) ?>
+                        <td class="cell-left date-cell">
+                            <div><?= date('d/m/y', strtotime($p['creado_en'])) ?></div>
+                            <div class="customer-meta"><?= date('H:i', strtotime($p['creado_en'])) ?></div>
                         </td>
+                        <?php if ($isAdmin): ?>
+                        <td class="cell-center action-cell"><a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" class="btn btn-edit">Ver / Editar</a></td>
+                        <?php endif; ?>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
+
         <?php if ($totalPags > 1): ?>
-        <div style="padding:14px 20px;display:flex;justify-content:center;gap:6px;border-top:1px solid var(--border);">
+        <div class="pagination">
             <?php for ($i=1;$i<=$totalPags;$i++): ?>
-                <a href="?pag=<?= $i ?><?= $q?"&q=".urlencode($q):"" ?><?= $estado?"&estado=$estado":"" ?><?= $entrega?"&entrega=$entrega":"" ?>"
-                   style="width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;border:1.5px solid <?= $i==$pag?'var(--primary)':'var(--border)' ?>;background:<?= $i==$pag?'var(--primary)':'white' ?>;color:<?= $i==$pag?'white':'var(--dark)' ?>;text-decoration:none;">
-                    <?= $i ?>
-                </a>
+                <a href="?pag=<?= $i ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $estado ? '&estado=' . $estado : '' ?><?= $entrega ? '&entrega=' . $entrega : '' ?>" class="page-link <?= $i === $pag ? 'active' : '' ?>"><?= $i ?></a>
             <?php endfor; ?>
         </div>
         <?php endif; ?>
     </div>
+
 </div>
 
 <?php include '../includes/footer.php'; ?>

@@ -30,6 +30,15 @@ if (isLoggedIn()) {
     $userPoints = 0;
   }
 }
+// Asegurar que el rol en sesión está sincronizado con la BD para reflejar cambios sin re-login
+if (isLoggedIn()) {
+  try {
+    $stmtRol = getDB()->prepare("SELECT rol FROM usuarios WHERE id = ? AND activo = 1");
+    $stmtRol->execute([$_SESSION['usuario_id']]);
+    $rolFromDb = $stmtRol->fetchColumn();
+    if ($rolFromDb) $_SESSION['rol'] = $rolFromDb;
+  } catch (Exception $e) { /* ignorar */ }
+}
 $pdo2 = getDB();
 $pdo2 = getDB();
 try {
@@ -97,6 +106,9 @@ if (isset($_SESSION['flash_message'])) {
               <a href="<?= SITE_URL ?>/mis-cupones.php"><i class="fas fa-gift" style="color:var(--primary);width:16px;"></i> Mis Cupones</a>
               <?php if (isAdmin()): ?>
                 <a href="<?= SITE_URL ?>/admin/index.php"><i class="fas fa-cog" style="color:var(--primary);width:16px;"></i> Panel Admin</a>
+              <?php endif; ?>
+              <?php if (isLoggedIn() && ($_SESSION['rol'] ?? '') === 'repartidor'): ?>
+                <a href="<?= SITE_URL ?>/admin/pedidos.php"><i class="fas fa-truck" style="color:var(--primary);width:16px;"></i> Panel Pedidos</a>
               <?php endif; ?>
               <a href="<?= SITE_URL ?>/logout.php" class="danger"><i class="fas fa-sign-out-alt" style="color:var(--danger);width:16px;"></i> Cerrar Sesión</a>
             </div>

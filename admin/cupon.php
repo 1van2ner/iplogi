@@ -1195,6 +1195,7 @@ include '../includes/header.php';
                                 <th>Campaña</th>
                                 <th>Descuento</th>
                                 <th>Vigencia</th>
+                                <th>Usos</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
                             </tr>
@@ -1232,6 +1233,16 @@ include '../includes/header.php';
                                 <td>
                                     <?= sanitize($inicioTexto) ?>
                                     <small>Hasta <?= sanitize($finTexto) ?></small>
+                                </td>
+
+                                <td>
+                                    <?php
+                                        if (isset($cupon['limite_usos']) && $cupon['limite_usos'] !== null) {
+                                            echo ($cupon['limite_usos'] > 0 ? '1/' : '0/') . (int)$cupon['limite_usos'];
+                                        } else {
+                                            echo '∞';
+                                        }
+                                    ?>
                                 </td>
 
                                 <td>

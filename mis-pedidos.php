@@ -1,20 +1,39 @@
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/config.php';
 
+if (!isLoggedIn()) {
+    header('Location: ' . SITE_URL . '/login.php');
+    exit;
+}
+
 try {
     $pdo = getDB();
 } catch (Exception $e) {
     die("Error de conexión: " . $e->getMessage());
 }
 
+$userRole = $_SESSION['rol'] ?? '';
+$isManager = isAdmin() || $userRole === 'repartidor';
+
 $pedidos = [];
 try {
-    $stmt = $pdo->query(
-        "SELECT p.id, p.total, p.estado, p.metodo_pago, p.tipo_entrega, p.creado_en, u.nombre, u.apellido
-         FROM pedidos p
-         JOIN usuarios u ON p.usuario_id = u.id
-         ORDER BY p.creado_en DESC LIMIT 15"
-    );
+    if ($isManager) {
+        $stmt = $pdo->query(
+            "SELECT p.id, p.total, p.estado, p.metodo_pago, p.tipo_entrega, p.creado_en, u.nombre, u.apellido
+             FROM pedidos p
+             JOIN usuarios u ON p.usuario_id = u.id
+             ORDER BY p.creado_en DESC LIMIT 15"
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            "SELECT p.id, p.total, p.estado, p.metodo_pago, p.tipo_entrega, p.creado_en, u.nombre, u.apellido
+             FROM pedidos p
+             JOIN usuarios u ON p.usuario_id = u.id
+             WHERE p.usuario_id = ?
+             ORDER BY p.creado_en DESC LIMIT 15"
+        );
+        $stmt->execute([$_SESSION['usuario_id']]);
+    }
     $pedidos = $stmt->fetchAll();
 } catch (Exception $e) {
     // Si falla, se queda vacío
@@ -22,9 +41,6 @@ try {
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/iptecnologia/includes/header.php';
 
-// Asegurar que el usuario esté logueado y obtener datos de perfil para la barra lateral
-if (!isLoggedIn()) { header('Location: ' . SITE_URL . '/login.php'); exit; }
-$pdo = getDB();
 $s = $pdo->prepare("SELECT * FROM usuarios WHERE id=?"); $s->execute([$_SESSION['usuario_id']]);
 $user = $s->fetch();
 $s = $pdo->prepare("SELECT COUNT(*) FROM pedidos WHERE usuario_id=?"); $s->execute([$_SESSION['usuario_id']]);
