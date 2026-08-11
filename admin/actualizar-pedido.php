@@ -65,14 +65,26 @@ switch ($accion) {
             }
         }
 
-        $pdo->prepare("UPDATE pedidos SET estado = ?, actualizado_en = NOW() WHERE id = ?")
-            ->execute([$nuevoEstado, $pedidoId]);
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare("UPDATE pedidos SET estado = ? WHERE id = ?")->execute([$nuevoEstado, $pedidoId]);
+            // confirmar leyendo el valor persistido
+            $check = $pdo->prepare("SELECT estado FROM pedidos WHERE id = ?");
+            $check->execute([$pedidoId]);
+            $persisted = $check->fetchColumn();
+            $pdo->commit();
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Estado actualizado a: ' . ucfirst($nuevoEstado),
-            'estado'  => $nuevoEstado,
-        ]);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Estado actualizado a: ' . ucfirst($persisted),
+                'estado'  => $persisted,
+            ]);
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            http_response_code(500);
+            error_log('Error updating pedido estado: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Error al actualizar el estado']);
+        }
         break;
 
     // ── Cambiar estado de una línea de producto ──────────────────────────────────────
@@ -114,7 +126,7 @@ switch ($accion) {
         $distrito   = sanitize($_POST['distrito']   ?? '');
         $referencia = sanitize($_POST['referencia'] ?? '');
 
-        $pdo->prepare("UPDATE pedidos SET direccion_entrega = ?, distrito_entrega = ?, referencia = ?, actualizado_en = NOW() WHERE id = ?")
+        $pdo->prepare("UPDATE pedidos SET direccion_entrega = ?, distrito_entrega = ?, referencia = ? WHERE id = ?")
             ->execute([$direccion, $distrito, $referencia, $pedidoId]);
 
         echo json_encode(['success'=>true,'message'=>'Datos de entrega actualizados']);
@@ -125,7 +137,7 @@ switch ($accion) {
         $nota = sanitize($_POST['nota'] ?? '');
         if (!$nota) { echo json_encode(['success'=>false,'message'=>'La nota no puede estar vacía']); exit; }
 
-        $pdo->prepare("UPDATE pedidos SET notas_admin = CONCAT_WS('\n', notas_admin, ?), actualizado_en = NOW() WHERE id = ?")
+        $pdo->prepare("UPDATE pedidos SET notas_admin = CONCAT_WS('\n', notas_admin, ?) WHERE id = ?")
             ->execute([$nota . ' [' . date('d/m/Y H:i') . ']', $pedidoId]);
 
         echo json_encode(['success'=>true,'message'=>'Nota agregada correctamente']);

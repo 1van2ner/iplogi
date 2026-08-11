@@ -804,7 +804,14 @@ include '../includes/header.php';
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;"> 
             <?php
-            $estadoColors = ['pendiente'=>['#fef3c7','#92400e'],'almacen'=>['#dbeafe','#1e40af'],'enviado'=>['#d1fae5','#065f46']];
+            $estadoColors = [
+                'pendiente' => ['#fef3c7', '#92400e'],
+                'procesando' => ['#fce7a9', '#92400e'],
+                'almacen' => ['#dbeafe', '#1e40af'],
+                'enviado' => ['#d1fae5', '#065f46'],
+                'entregado' => ['#dcfce7', '#166534'],
+                'cancelado' => ['#fee2e2', '#991b1b'],
+            ];
             foreach ($estadoColors as $est => [$bg, $color]):
             ?>
                 <a href="?tab=pedidos&estado=<?= $est ?>" style="padding:8px 16px;border-radius:24px;background:<?= $bg ?>;color:<?= $color ?>;font-size:13px;font-weight:700;text-decoration:none;border:1px solid <?= $estado === $est ? $color : 'transparent' ?>;">

@@ -69,7 +69,14 @@ include '../includes/header.php';
     <!-- BADGES ESTADO -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
         <?php
-        $estadoColors = ['pendiente'=>['#fef3c7','#92400e'],'almacen'=>['#dbeafe','#1e40af'],'enviado'=>['#d1fae5','#065f46']];
+        $estadoColors = [
+        'pendiente' => ['#fef3c7', '#92400e'],
+        'procesando' => ['#fce7a9', '#92400e'],
+        'almacen' => ['#dbeafe', '#1e40af'],
+        'enviado' => ['#d1fae5', '#065f46'],
+        'entregado' => ['#dcfce7', '#166534'],
+        'cancelado' => ['#fee2e2', '#991b1b'],
+    ];
         foreach ($estadoColors as $est=>[$bg,$color]):
         ?>
         <a href="pedidos.php?estado=<?= $est ?>" style="padding:6px 14px;border-radius:20px;background:<?= $bg ?>;color:<?= $color ?>;font-size:12px;font-weight:700;text-decoration:none;border:1.5px solid <?= $estado===$est?$color:'transparent' ?>;">
@@ -162,7 +169,7 @@ include '../includes/header.php';
                                         $estadoOptions[] = $p['estado'];
                                     }
                                 ?>
-                                <select name="estado" class="status-select" onchange="this.form.submit()">
+                                <select name="estado" class="status-select" data-pedido-id="<?= $p['id'] ?>">
                                     <?php foreach ($estadoOptions as $s): ?>
                                         <option value="<?= $s ?>" <?= $p['estado'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
                                     <?php endforeach; ?>
@@ -194,3 +201,76 @@ include '../includes/header.php';
 </div>
 
 <?php include '../includes/footer.php'; ?>
+<script>
+// Manejo AJAX para actualizar estado sin recarga (evita reenvío de formulario)
+document.addEventListener('DOMContentLoaded', function() {
+    function sanitizeMessage(msg) {
+        if (!msg) return '';
+        var s = (msg || '').toString();
+        var low = s.toLowerCase();
+        if (low.indexOf('<') !== -1 && low.indexOf('unexpected token') !== -1) return 'Respuesta inválida del servidor';
+        // eliminar HTML y truncar
+        try {
+            var d = document.createElement('div'); d.innerHTML = s;
+            var txt = (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+            return txt.length > 140 ? txt.slice(0,137) + '...' : txt;
+        } catch (e) {
+            return s.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0,140);
+        }
+    }
+
+    function postEstado(pedidoId, nuevo, selectEl) {
+        var prev = selectEl.dataset.prev || selectEl.value;
+        selectEl.disabled = true;
+        selectEl.classList.add('updating');
+        var body = 'accion=estado&pedido_id=' + encodeURIComponent(pedidoId) + '&estado=' + encodeURIComponent(nuevo);
+        fetch('<?= SITE_URL ?>/admin/actualizar-pedido.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        }).then(function(res) {
+            // intentar leer JSON si viene
+            return res.text().then(function(text) {
+                var data = null;
+                try { data = JSON.parse(text); } catch(e) { data = null; }
+                if (!res.ok) {
+                    var msg = data && data.message ? data.message : ('HTTP ' + res.status);
+                    throw new Error(msg);
+                }
+                if (!data) {
+                    throw new Error('Respuesta inválida del servidor');
+                }
+                return data;
+            });
+        }).then(function(json) {
+            if (json && json.success) {
+                if (typeof showToast === 'function') showToast(sanitizeMessage(json.message || 'Estado actualizado'), true);
+                selectEl.dataset.prev = nuevo;
+            } else {
+                var m = json && json.message ? json.message : 'Error al actualizar';
+                if (typeof showToast === 'function') showToast(sanitizeMessage(m), false);
+                selectEl.value = prev;
+            }
+        }).catch(function(err) {
+            // mostrar mensaje genérico y no HTML
+            try { console.debug('AJAX error raw:', err && err.message ? err.message : err); } catch(e){}
+            if (typeof showToast === 'function') showToast(sanitizeMessage(err && err.message ? err.message : 'No se pudo actualizar'), false);
+            selectEl.value = prev;
+        }).finally(function(){
+            selectEl.disabled = false;
+            selectEl.classList.remove('updating');
+        });
+    }
+
+    document.querySelectorAll('.status-select').forEach(function(sel){
+        sel.dataset.prev = sel.value;
+        sel.addEventListener('focus', function(){ sel.dataset.prev = sel.value; });
+        sel.addEventListener('change', function(){
+            var pedidoId = sel.closest('form') ? (sel.closest('form').querySelector('input[name="pedido_id"]').value || sel.dataset.pedidoId) : sel.dataset.pedidoId;
+            if (!pedidoId) return;
+            postEstado(pedidoId, sel.value, sel);
+        });
+    });
+});
+</script>
