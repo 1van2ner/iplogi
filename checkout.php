@@ -215,6 +215,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $pdo->beginTransaction();
 
       // Detectar columnas disponibles en `pedidos` y preparar INSERT dinámico
+      // Asegurar columnas para guardar información de cupón/descuento en pedidos
+      try {
+        $colCheck = $pdo->prepare("SHOW COLUMNS FROM pedidos LIKE 'cupon_codigo'");
+        $colCheck->execute();
+        if ($colCheck->rowCount() === 0) {
+          $pdo->exec("ALTER TABLE pedidos ADD COLUMN cupon_codigo VARCHAR(64) NULL");
+        }
+        $colCheck = $pdo->prepare("SHOW COLUMNS FROM pedidos LIKE 'descuento'");
+        $colCheck->execute();
+        if ($colCheck->rowCount() === 0) {
+          $pdo->exec("ALTER TABLE pedidos ADD COLUMN descuento DECIMAL(10,2) NOT NULL DEFAULT 0.00");
+        }
+      } catch (Exception $e) {
+        // Si falla el alter (permisos/DB), continuamos sin insertar esas columnas
+      }
+
       $colsInfo = $pdo->query("SHOW COLUMNS FROM pedidos")->fetchAll(PDO::FETCH_ASSOC);
       $hasEstado = false; $hasDireccion = false; $hasDistrito = false; $hasReferencia = false; $hasNotas = false;
       foreach ($colsInfo as $col) {
@@ -240,7 +256,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       if ($hasDireccion) { $columns[] = 'direccion_entrega'; $placeholders[] = '?'; $params[] = $direccion; }
       if ($hasDistrito)  { $columns[] = 'distrito_entrega';  $placeholders[] = '?'; $params[] = ($tipoEnvio==='provincia' ? $provDest : $distrito); }
       if ($hasReferencia){ $columns[] = 'referencia'; $placeholders[] = '?'; $params[] = $referencia; }
+
       if ($hasNotas)     { $columns[] = 'notas'; $placeholders[] = '?'; $params[] = $notas; }
+
+      // Si la tabla pedidos tiene columnas para cupon/descuento, incluirlas
+      $colNames = array_column($colsInfo, 'Field');
+      if (in_array('cupon_codigo', $colNames, true)) {
+        $columns[] = 'cupon_codigo'; $placeholders[] = '?'; $params[] = ($codigoCupon !== '' ? $codigoCupon : null);
+      }
+      if (in_array('descuento', $colNames, true)) {
+        $columns[] = 'descuento'; $placeholders[] = '?'; $params[] = (float)($descuentoCupon ?? 0.0);
+      }
 
       $columns[] = 'creado_en'; $placeholders[] = 'NOW()';
 
@@ -304,7 +330,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $pdo->commit();
       header('Location: '.SITE_URL.'/pedido-exitoso.php?id='.$pedidoId); exit;
     } catch(Exception $e) {
-      $pdo->rollBack();
+      // ✓ Verificar si hay transacción activa antes de rollBack
+      if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
       error_log('checkout: ' . $e->getMessage());
       $errores[] = 'Error al procesar. Intenta nuevamente.';
       if (defined('APP_DEBUG') && APP_DEBUG) {
@@ -492,7 +521,15 @@ $pageTitle='Finalizar Compra'; include 'includes/header.php';
         <?php endforeach; ?>
 
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--borde);">
-          <div class="summary-row"><span class="label">Subtotal</span><span><?=formatPrice($subtotal)?></span></div>
+          <div class="summary-row">
+            <span class="label">
+              Subtotal
+              <?php if ($descuentoCupon > 0): ?>
+                <span style="font-size:12px;color:#4caf50;font-weight:600;display:inline-block;margin-left:6px;">(<?=($cuponAplicado['tipo_descuento'] ?? 'porcentaje') === 'monto' ? 'Descuento '.formatPrice($descuentoCupon) : sanitize($cuponAplicado['descuento']).'% de descuento'?>)</span>
+              <?php endif; ?>
+            </span>
+            <span><?=formatPrice($subtotal)?></span>
+          </div>
         <?php if ($descuentoCupon > 0): ?>
           <div class="summary-row" id="descuento-row"><span class="label">Descuento <?=sanitize($codigoCupon)?></span><span class="val" style="color:#4caf50;">-<?=formatPrice($descuentoCupon)?></span></div>
         <?php endif; ?>

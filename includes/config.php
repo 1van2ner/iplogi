@@ -4,6 +4,9 @@
 // Archivo: includes/config.php
 // ============================================================
 
+// ⚠️ AUTOLOAD DE COMPOSER - DEBE SER LO PRIMERO
+require_once __DIR__ . '/../vendor/autoload.php';
+
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $localHosts = ['localhost', '127.0.0.1', '::1'];

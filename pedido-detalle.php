@@ -66,6 +66,11 @@ include 'includes/header.php';
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <span style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:700;"><?= ucfirst($pedido['estado']) ?></span>
             <span style="background:rgba(34,197,94,.1);color:#134e4a;padding:10px 16px;border-radius:999px;font-weight:700;">Total: <?= formatPrice($pedido['total']) ?></span>
+                        <?php if ($isAdmin): ?>
+                        <button type="button" class="btn-danger-large" style="margin-left:12px;" onclick="confirmEliminarPedido(<?= $pedido['id'] ?>)" title="Eliminar pedido">
+                            <i class="fas fa-trash-alt" style="color:#fff;font-size:16px;" aria-hidden="true"></i>
+                        </button>
+                        <?php endif; ?>
         </div>
     </div>
 
@@ -116,9 +121,64 @@ include 'includes/header.php';
             </tbody>
         </table>
 
-        <div style="display:flex;justify-content:flex-end;margin-top:18px;gap:14px;">
-            <div style="background:#f8fafc;color:var(--gris2);padding:12px 18px;border-radius:14px;">Items: <?= count($detalles) ?></div>
-            <div style="background:rgba(59,130,246,.08);color:var(--gris1);padding:12px 18px;border-radius:14px;font-weight:700;">Total: <?= formatPrice($pedido['total']) ?></div>
+        <?php
+            // Calcular subtotal a partir de los detalles (antes de descuento/envío)
+            $subtotal_calc = 0;
+            foreach ($detalles as $it) { $subtotal_calc += (float)($it['subtotal'] ?? 0); }
+            // Determinar descuento: preferir valor guardado en pedido, si no existe calcular diferencia
+            $discount_shown = 0.0;
+            if (!empty($pedido['descuento']) && (float)$pedido['descuento'] > 0) {
+                $discount_shown = (float)$pedido['descuento'];
+            } else {
+                // Fallback: si el subtotal calculado es mayor que el total, la diferencia es el descuento
+                $diff = $subtotal_calc - (float)$pedido['total'];
+                $discount_shown = $diff > 0 ? round($diff, 2) : 0.0;
+            }
+
+            // Determinar nota del descuento: porcentaje o monto según el cupón
+            $discount_note = '';
+            if (!empty($pedido['cupon_codigo'])) {
+                try {
+                    $stmtCup = $pdo->prepare("SELECT * FROM cupones WHERE codigo = ? LIMIT 1");
+                    $stmtCup->execute([$pedido['cupon_codigo']]);
+                    $cup = $stmtCup->fetch(PDO::FETCH_ASSOC);
+                    if (!$cup) {
+                        $stmtCup = $pdo->prepare("SELECT c.* FROM usuario_cupones uc JOIN cupones c ON uc.cupon_id=c.id WHERE uc.codigo_personal = ? LIMIT 1");
+                        $stmtCup->execute([$pedido['cupon_codigo']]);
+                        $cup = $stmtCup->fetch(PDO::FETCH_ASSOC);
+                    }
+                    if ($cup) {
+                        if (($cup['tipo_descuento'] ?? 'porcentaje') === 'monto') {
+                            $discount_note = 'S/ ' . number_format((float)$cup['descuento'], 2);
+                        } else {
+                            $p = rtrim(rtrim(number_format((float)$cup['descuento'], 2), '0'), '.');
+                            $discount_note = $p . '%';
+                        }
+                    }
+                } catch (Exception $e) {
+                    // ignore DB lookup failures and fallback to computed percent
+                }
+            }
+            if ($discount_note === '' && $discount_shown > 0) {
+                // Fallback: mostrar el monto en soles cuando no se determinó el tipo
+                $discount_note = 'S/ ' . number_format($discount_shown, 2);
+            }
+        ?>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-top:18px;">
+            
+            <div style="width:100%;max-width:360px;">
+                
+                <?php if ($discount_shown > 0): ?>
+                <div style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:12px;background:rgba(236,253,245,0.8);border:1px solid rgba(134,239,172,0.6);margin-bottom:6px;">
+                    <span style="color:#166534;">Descuento <?= !empty($pedido['cupon_codigo']) ? '('.sanitize($pedido['cupon_codigo']).')' : '' ?> <?= $discount_note ? '<span style="font-size:12px;color:#166534;margin-left:8px;">('.sanitize($discount_note).')</span>' : '' ?></span>
+                    <strong style="color:#166534;">-<?= formatPrice($discount_shown) ?></strong>
+                </div>
+                <?php endif; ?>
+                <div style="display:flex;justify-content:space-between;padding:12px 16px;border-radius:12px;background:rgba(59,130,246,.08);font-weight:700;color:var(--gris1);">
+                    <span>Total</span>
+                    <span><?= formatPrice($pedido['total']) ?></span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -131,3 +191,29 @@ include 'includes/header.php';
 </div>
 
 <?php include 'includes/footer.php'; ?>
+
+<script>
+// Styles for prominent delete button
+(function(){
+    const css = `
+    .btn-danger-large{background:linear-gradient(180deg,#f44336,#c62828);border:1px solid #b71c1c;color:#fff;padding:8px;width:44px;height:40px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(196,51,51,0.25);transition:transform .12s,box-shadow .12s;}
+    .btn-danger-large:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(196,51,51,0.32);} 
+    `;
+    const s = document.createElement('style'); s.appendChild(document.createTextNode(css)); document.head.appendChild(s);
+})();
+function confirmEliminarPedido(id) {
+    if (!confirm('¿Eliminar este pedido de forma permanente? Esta acción no se puede deshacer.')) return;
+    fetch('<?= SITE_URL ?>/admin/eliminar-pedido.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'pedido_id=' + encodeURIComponent(id)
+    }).then(r => r.json()).then(d => {
+        if (d && d.success) {
+            alert('Pedido eliminado. Redirigiendo al panel.');
+            window.location.href = '<?= SITE_URL ?>/admin/pedidos.php';
+        } else {
+            alert('No se pudo eliminar el pedido: ' + (d && d.message ? d.message : 'Error'));
+        }
+    }).catch(err => { console.error(err); alert('Error de red.'); });
+}
+</script>

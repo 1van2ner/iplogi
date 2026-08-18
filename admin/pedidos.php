@@ -123,9 +123,7 @@ include '../includes/header.php';
                         <th class="cell-left">Pago</th>
                         <th class="cell-center">Estado</th>
                         <th class="cell-left">Fecha</th>
-                        <?php if ($isAdmin): ?>
                         <th class="cell-center">Acción</th>
-                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -180,9 +178,7 @@ include '../includes/header.php';
                             <div><?= date('d/m/y', strtotime($p['creado_en'])) ?></div>
                             <div class="customer-meta"><?= date('H:i', strtotime($p['creado_en'])) ?></div>
                         </td>
-                        <?php if ($isAdmin): ?>
                         <td class="cell-center action-cell"><a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" class="btn btn-edit">Ver / Editar</a></td>
-                        <?php endif; ?>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>

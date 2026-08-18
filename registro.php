@@ -173,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $nuevo_usuario_id = (int)$pdo->lastInsertId();
             $cupon_bienvenida_id = 1;
-            asignarCuponAutomatico($pdo, $nuevo_usuario_id, $cupon_bienvenida_id, 15);
+            asignarCuponAutomatico($pdo, $nuevo_usuario_id, $cupon_bienvenida_id, 30);
 
             // Si el rol calculado es "proyectista", avisar por correo (dato clave para verificarlo a mano)
             if ($rolCalculado === 'proyectista' && function_exists('sendNotificacionRolEspecial')) {

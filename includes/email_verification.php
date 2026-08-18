@@ -2,7 +2,16 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+// ⚠️ El autoload ya está en config.php, pero lo dejamos aquí para seguridad
+if (!class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+}
+
+// ✓ Validar que las constantes de correo estén definidas
+if (!defined('MAIL_HOST') || !defined('MAIL_USER') || !defined('MAIL_PASS') || !defined('MAIL_PORT')) {
+    error_log('❌ ERROR: Constantes de correo no definidas. Verifica includes/config.php');
+    die('Error de configuración de correo. Contacta al administrador.');
+}
 
 // Correo(s) que deben enterarse cuando alguien se registra como Proyectista.
 // ⚠️ EDITAR: reemplazar por el correo real de Sheerley.
@@ -35,9 +44,14 @@ if (!function_exists('sendNotificacionRolEspecial')) {
             $mail->SMTPAuth   = true;
             $mail->Username   = MAIL_USER;
             $mail->Password   = MAIL_PASS;
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;  // TLS en puerto 465
             $mail->Port       = MAIL_PORT;
             $mail->CharSet    = 'UTF-8';
+
+            // ✓ Debugging en desarrollo
+            if (APP_DEBUG) {
+                $mail->SMTPDebug = 2;  // 0=sin debug, 2=debug client y server
+            }
 
             $mail->setFrom(MAIL_FROM, MAIL_NAME);
             $mail->addAddress(NOTIFY_EMAIL_PROYECTISTA);
@@ -48,7 +62,13 @@ if (!function_exists('sendNotificacionRolEspecial')) {
             $mail->send();
             return true;
         } catch (Exception $e) {
-            error_log('Error correo notificación rol: ' . $e->getMessage());
+            $errorMsg = 'PHPMailer Error: ' . $e->getMessage();
+            error_log('❌ ' . $errorMsg);
+            if (APP_DEBUG) {
+                error_log('📧 SMTP Host: ' . MAIL_HOST);
+                error_log('📧 SMTP Port: ' . MAIL_PORT);
+                error_log('📧 SMTP User: ' . MAIL_USER);
+            }
             return false;
         }
     }
@@ -138,9 +158,14 @@ if (!function_exists('sendVerificationEmail')) {
             $mail->SMTPAuth   = true;
             $mail->Username   = MAIL_USER;
             $mail->Password   = MAIL_PASS;
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;  // TLS en puerto 465
             $mail->Port       = MAIL_PORT;
             $mail->CharSet    = 'UTF-8';
+
+            // ✓ Debugging en desarrollo
+            if (APP_DEBUG) {
+                $mail->SMTPDebug = 2;  // 0=sin debug, 2=debug client y server
+            }
 
             $mail->setFrom(MAIL_FROM, MAIL_NAME);
             $mail->addAddress($toEmail, $toName);
@@ -152,7 +177,13 @@ if (!function_exists('sendVerificationEmail')) {
             $mail->send();
             return true;
         } catch (Exception $e) {
-            error_log('Error correo: ' . $e->getMessage());
+            $errorMsg = 'PHPMailer Error: ' . $e->getMessage();
+            error_log('❌ ' . $errorMsg);
+            if (APP_DEBUG) {
+                error_log('📧 SMTP Host: ' . MAIL_HOST);
+                error_log('📧 SMTP Port: ' . MAIL_PORT);
+                error_log('📧 To Email: ' . $toEmail);
+            }
             return false;
         }
     }

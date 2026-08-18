@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($hoy === $cumpleUsuario) {
                         $cupon_cumple_id = 2;
 
-                        if (asignarCuponAutomatico($pdo, $_SESSION['usuario_id'], $cupon_cumple_id, 7)) {
+                        if (asignarCuponAutomatico($pdo, $_SESSION['usuario_id'], $cupon_cumple_id, 30)) {
                             $_SESSION['flash_message'] = "¡Feliz cumpleaños! Te hemos regalado un cupón de descuento especial en tu cuenta.";
                             $_SESSION['flash_type'] = "success";
                         }

@@ -250,6 +250,8 @@ $totalPedidosFiltered = $pdo->prepare("SELECT COUNT(*) FROM pedidos p JOIN usuar
 $totalPedidosFiltered->execute($params);
 $totalPedidosFiltered = (int)$totalPedidosFiltered->fetchColumn();
 
+$stats = $pdo->query("SELECT estado, COUNT(*) as n FROM pedidos GROUP BY estado")->fetchAll(PDO::FETCH_KEY_PAIR);
+
 $pedidosPorPagina = 50;
 $pedidosAdminStmt = $pdo->prepare("SELECT p.*, u.nombre, u.apellido, u.email, u.telefono, (SELECT COUNT(*) FROM detalle_pedidos WHERE pedido_id=p.id) as n_items FROM pedidos p JOIN usuarios u ON p.usuario_id=u.id $ws ORDER BY p.creado_en DESC LIMIT $pedidosPorPagina");
 $pedidosAdminStmt->execute($params);
@@ -267,9 +269,10 @@ include '../includes/header.php';
 
 <style>
 :root{ --amarillo-texto:#6b7300; } /* variante oscura del amarillo, para texto legible sobre fondo claro */
-.admin-layout{display:grid;grid-template-columns:260px 1fr;gap:24px;padding:28px 0 60px;align-items:start;}
-.admin-layout > main{min-width:0;}
-.admin-sidebar{background:var(--bg2);border:1.5px solid var(--borde);border-radius:var(--rl);padding:24px;position:sticky;top:150px;}
+.admin-page-container{min-height:100vh;overflow:hidden;}
+.admin-layout{display:grid;grid-template-columns:260px 1fr;gap:24px;padding:28px 0 60px;align-items:start;min-height:calc(100vh - 40px);overflow:hidden;}
+.admin-layout > main{min-width:0;overflow-y:auto;max-height:calc(100vh - 40px);padding-right:0;}
+.admin-sidebar{background:var(--bg2);border:1.5px solid var(--borde);border-radius:var(--rl);padding:24px;position:sticky;top:20px;max-height:calc(100vh - 40px);overflow-y:auto;}
 .admin-avatar{width:80px;height:80px;background:var(--amarillo);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;color:#000;margin:0 auto 14px;box-shadow:0 0 0 4px rgba(237,232,42,.25);}
 .admin-name{text-align:center;font-size:17px;font-weight:900;color:var(--blanco);margin-bottom:4px;}
 .admin-role{text-align:center;margin-bottom:6px;}
@@ -310,10 +313,15 @@ include '../includes/header.php';
 .atbl tr:hover td{background:rgba(255,255,255,.025);}
 .col-sticky-actions{position:sticky;right:0;background:var(--bg2);box-shadow:-6px 0 8px -6px rgba(0,0,0,.15);z-index:2;}
 .atbl tr:hover .col-sticky-actions{background:#fafafa;}
-.btn-sm{padding:5px 11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;text-decoration:none;transition:all .15s;}
-.btn-edit{background:rgba(237,232,42,.12);color:var(--amarillo-texto);}
+.col-sticky-actions .btn-group{display:flex;gap:8px;justify-content:center;align-items:center;padding:4px 0;}
+.col-sticky-actions .btn-group .btn-sm{padding:0;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;display:inline-flex;align-items:center;justify-content:center;gap:0;text-decoration:none;transition:all .12s;width:34px;height:32px}
+.col-sticky-actions .btn-group .btn-edit,
+.col-sticky-actions .btn-group .btn-del{width:34px;height:32px;padding:0;border-radius:8px}
+.btn-edit{background:rgba(237,232,42,.12);color:var(--amarillo-texto);border:1px solid rgba(237,232,42,.18);}
+.btn-edit i{font-size:14px}
 .btn-edit:hover{background:var(--amarillo);color:#000;}
-.btn-del{background:rgba(229,57,53,.1);color:#ff6b6b;}
+.btn-del{background:rgba(229,57,53,.1);color:#ff6b6b;border:1px solid rgba(229,57,53,.12);}
+.btn-del i{font-size:14px}
 .btn-del:hover{background:var(--rojo);color:#fff;}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;align-items:center;justify-content:center;padding:20px;}
 .modal-overlay.open{display:flex;}
@@ -443,7 +451,7 @@ include '../includes/header.php';
 }
 </style>
 
-<div class="container">
+<div class="container admin-page-container">
 <div class="admin-layout">
 
   <!-- SIDEBAR -->
@@ -655,18 +663,18 @@ include '../includes/header.php';
               </span>
             </td>
             <td>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                <button class="btn-sm btn-edit" onclick='abrirModalProd(<?= htmlspecialchars(json_encode($pr),ENT_QUOTES) ?>)'>
-                  <i class="fas fa-edit"></i> Editar
+              <div class="btn-group">
+                <button class="btn-sm btn-edit" onclick='abrirModalProd(<?= htmlspecialchars(json_encode($pr),ENT_QUOTES) ?>)' title="Editar producto">
+                  <i class="fas fa-edit" aria-hidden="true"></i>
                 </button>
                 <!-- Formulario oculto para eliminar producto -->
                 <form id="form-delprod-<?= $pr['id'] ?>" method="POST" action="?tab=productos" class="form-del-hidden">
                   <input type="hidden" name="action" value="eliminar_producto">
                   <input type="hidden" name="prod_id" value="<?= $pr['id'] ?>">
                 </form>
-                <button type="button" class="btn-sm btn-del"
+                <button type="button" class="btn-sm btn-edit" title="Eliminar producto"
                         onclick="eliminarProducto(<?= $pr['id'] ?>, '<?= htmlspecialchars(addslashes($pr['nombre']),ENT_QUOTES) ?>')">
-                  <i class="fas fa-trash"></i> Eliminar
+                  <i class="fas fa-trash" aria-hidden="true"></i>
                 </button>
               </div>
             </td>
@@ -762,9 +770,9 @@ include '../includes/header.php';
             <td style="text-align:center;font-weight:700;color:var(--amarillo-texto);"><?= $u['n_pedidos'] ?></td>
             <td><span style="padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;background:<?= $u['activo']?'rgba(67,160,71,.2)':'rgba(229,57,53,.2)' ?>;color:<?= $u['activo']?'#81c784':'#ff6b6b' ?>;"><?= $u['activo']?'Activo':'Inactivo' ?></span></td>
             <td class="col-sticky-actions">
-              <div style="display:flex;gap:5px;">
-                <button class="btn-sm btn-edit" onclick='abrirModalUser(<?= htmlspecialchars(json_encode($u),ENT_QUOTES) ?>)'>
-                  <i class="fas fa-edit"></i>
+              <div class="btn-group">
+                <button class="btn-sm btn-edit" onclick='abrirModalUser(<?= htmlspecialchars(json_encode($u),ENT_QUOTES) ?>)' title="Editar usuario">
+                  <i class="fas fa-edit" aria-hidden="true"></i>
                 </button>
                 <?php if($u['id']!=(int)$_SESSION['usuario_id']): ?>
                 <!-- Formulario oculto para eliminar usuario -->
@@ -772,9 +780,9 @@ include '../includes/header.php';
                   <input type="hidden" name="action" value="eliminar_usuario">
                   <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                 </form>
-                <button type="button" class="btn-sm btn-del"
+                <button type="button" class="btn-sm btn-edit" title="Eliminar usuario"
                         onclick="eliminarUsuario(<?= $u['id'] ?>, '<?= htmlspecialchars(sanitize($u['nombre']),ENT_QUOTES) ?>')">
-                  <i class="fas fa-trash"></i>
+                  <i class="fas fa-trash" aria-hidden="true"></i>
                 </button>
                 <?php endif; ?>
               </div>
@@ -795,10 +803,6 @@ include '../includes/header.php';
             <div>
                 <h2 style="font-size:22px;font-weight:900;color:var(--blanco);margin-bottom:8px;"><i class="fas fa-shopping-bag" style="color:var(--amarillo-texto);"></i> Pedidos</h2>
                 <p style="margin:0;color:var(--gris3);font-size:13px;">Busca, filtra y actualiza el estado de los pedidos directamente desde el panel.</p>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-                <a href="?tab=pedidos" class="btn btn-secondary">Limpiar filtros</a>
-                <a href="pedido-detalle.php" class="btn btn-primary">Nuevo pedido</a>
             </div>
         </div>
 
@@ -853,7 +857,6 @@ include '../includes/header.php';
                         <th class="cell-left">Pago</th>
                         <th class="cell-center">Estado</th>
                         <th class="cell-left">Fecha</th>
-                        <th class="cell-center">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -883,35 +886,27 @@ include '../includes/header.php';
                         </td>
                         <td class="cell-left payment-cell"><?= $pagoLabels[$p['metodo_pago']] ?? $p['metodo_pago'] ?></td>
                         <td class="cell-center status-cell">
-                            <form method="POST" class="status-form">
-                                <input type="hidden" name="tab" value="pedidos">
-                                <input type="hidden" name="pedido_id" value="<?= $p['id'] ?>">
-                                <?php if ($q): ?><input type="hidden" name="q" value="<?= $q ?>"><?php endif; ?>
-                                <?php if ($estado): ?><input type="hidden" name="estado" value="<?= $estado ?>"><?php endif; ?>
-                                <?php if ($entrega): ?><input type="hidden" name="entrega" value="<?= $entrega ?>"><?php endif; ?>
-                                <?php
-                                    $estadoOptions = $p['tipo_entrega'] === 'provincia'
-                                        ? ['pendiente','almacen','enviado']
-                                        : ['pendiente','procesando','enviado','entregado','cancelado'];
-                                    if (!in_array($p['estado'], $estadoOptions, true)) {
-                                        $estadoOptions[] = $p['estado'];
-                                    }
-                                ?>
-                                <select name="estado" class="status-select" onchange="this.form.submit()">
-                                    <?php foreach ($estadoOptions as $s): ?>
-                                        <option value="<?= $s ?>" <?= $p['estado'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </form>
+                            <?php
+                                $estadoOptions = $p['tipo_entrega'] === 'provincia'
+                                    ? ['pendiente','almacen','enviado']
+                                    : ['pendiente','procesando','enviado','entregado','cancelado'];
+                                if (!in_array($p['estado'], $estadoOptions, true)) {
+                                    $estadoOptions[] = $p['estado'];
+                                }
+                            ?>
+                            <select name="estado" class="status-select" onchange="cambiarEstado(<?= $p['id'] ?>, this)">
+                                <?php foreach ($estadoOptions as $s): ?>
+                                    <option value="<?= $s ?>" <?= $p['estado'] === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </td>
                         <td class="cell-left date-cell">
                             <div><?= date('d/m/y', strtotime($p['creado_en'])) ?></div>
                             <div class="customer-meta"><?= date('H:i', strtotime($p['creado_en'])) ?></div>
                         </td>
-                        <td class="cell-center action-cell"><a href="<?= SITE_URL ?>/pedido-detalle.php?id=<?= $p['id'] ?>" class="btn btn-edit">Ver / Editar</a></td>
                     </tr>
                     <?php endforeach; ?>
-                    <?php if (empty($pedidosAdmin)): ?><tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gris3);">No hay pedidos</td></tr><?php endif; ?>
+                    <?php if (empty($pedidosAdmin)): ?><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--gris3);">No hay pedidos</td></tr><?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -1214,14 +1209,32 @@ function eliminarImagen(campoActual, previewId, inputId) {
     if (inp) inp.value = '';
   });
 }
-function cambiarEstado(id, estado) {
+function cambiarEstado(id, select) {
+  var estado = select.value;
   fetch('<?= SITE_URL ?>/admin/actualizar-pedido.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'accion=estado&pedido_id=' + id + '&estado=' + estado
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (typeof showToast === 'function')
-      showToast(d.success ? 'Estado actualizado: ' + estado : 'Error al actualizar', d.success);
+    credentials: 'same-origin',
+    body: 'accion=estado&pedido_id=' + encodeURIComponent(id) + '&estado=' + encodeURIComponent(estado)
+  }).then(function(r) {
+    return r.text().then(function(text) {
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+    });
+  }).then(function(d) {
+    if (d.success) {
+      if (typeof showToast === 'function') showToast('Estado actualizado: ' + estado, true);
+    } else {
+      if (typeof showToast === 'function') showToast(d.message || 'Error al actualizar', false);
+      select.value = select.dataset.prev || select.querySelector('option[selected]').value;
+    }
+    select.dataset.prev = select.value;
+  }).catch(function(err) {
+    if (typeof showToast === 'function') showToast(err.message || 'No se pudo actualizar', false);
+    select.value = select.dataset.prev || select.querySelector('option[selected]').value;
   });
 }
 
